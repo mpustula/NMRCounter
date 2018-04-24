@@ -15,7 +15,11 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 import mainwindow, edit_users, summary, message_box
 
-user_df=read_csv('users.csv',sep=';',index_col='ID')
+try:
+    user_df=read_csv('users.csv',sep=';',index_col='ID')
+except:
+    user_df=DataFrame(columns=['User','PayID','Patterns'])
+    
 user_df.sort_values(by=['User'],inplace=True)
 
 class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
@@ -474,8 +478,10 @@ class EditUsers(QtWidgets.QDialog, edit_users.Ui_Dialog):
         
     def new_user(self):
         self.set_enabled(True)
-        
-        new_index=max(user_df.index.tolist())+1
+        if not user_df.empty:
+            new_index=max(user_df.index.tolist())+1
+        else:
+            new_index=0
         self.label_num.setText('%d'%(new_index))
         self.lineEdit.setText('')
         self.lineEdit_2.setText('')
