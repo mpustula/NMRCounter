@@ -10,17 +10,25 @@ import time, datetime
 import dateutil.parser as dparser
 import re
 from pandas import read_csv, DataFrame
+import json
 
 from PyQt5 import QtCore, QtGui, QtWidgets
+from subprocess import call
 
-import mainwindow, edit_users, summary, message_box
+import mainwindow, edit_users, summary, message_box, login, options
+
+from mailmodule import mail
+from logmodule import log
+from reportmodule import report
+from typing import Any
 
 try:
     user_df=read_csv('users.csv',sep=';',index_col='ID')
 except:
-    user_df=DataFrame(columns=['User','PayID','Patterns'])
+    user_df=DataFrame(columns=['User','PayID','Patterns','Mail'])
     
 user_df.sort_values(by=['User'],inplace=True)
+user_df.fillna('',inplace=True)
 
 class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
     
@@ -31,15 +39,51 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         self.analyze_button.clicked.connect(self.analyze_files)
         self.find_button.clicked.connect(self.count_files)
         self.users_button.clicked.connect(self.analyze_users)
-        self.edit_list_button.clicked.connect(self.edit_users)
+        
         self.del_button.clicked.connect(self.clear_table)
         self.pushButton.clicked.connect(self.group_df)
+        
+        self.actionPayments.triggered.connect(lambda: self.activateTab(0))
+        self.actionSend_mail.triggered.connect(lambda: self.activateTab(1))
+        self.actionLogs.triggered.connect(lambda: self.activateTab(2))
+        
+        self.pushButton_8.clicked.connect(lambda: self.activateTab(0))
+        
         self.actionDo_CSV.triggered.connect(self.export_csv)
         self.actionDo_XLS.triggered.connect(self.export_xls)
         self.actionImportuj.triggered.connect(self.import_csv)
+        
+        self.actionConnect.triggered.connect(self.connect_server)
+        self.actionLogin.triggered.connect(self.login_server)
+        self.actionClose_connection.triggered.connect(self.close_connection)
+        
+        self.actionUsers.triggered.connect(self.edit_users)
+        
+        self.actionPreferences.triggered.connect(self.show_options)
         self.found_files=1
         
+        self.sender=None
+        self.start=None
+        self.end=None
+        
+        self.pushButton_2.clicked.connect(self.choose_spectra)
+        self.pushButton_3.clicked.connect(self.match_user)
+        self.button_connect.clicked.connect(self.connect_server)
+        self.button_login.clicked.connect(self.login_server)
+        self.button_logout.clicked.connect(self.close_connection)
+        
+        
+        self.pushButton_5.clicked.connect(self.send_all)
+        self.pushButton_6.clicked.connect(self.send_selected)
+        self.pushButton_4.clicked.connect(self.deleteRows)
+        
+        self.choose_log.clicked.connect(self.get_open_log)
+        self.read_log.clicked.connect(self.read_log_file)
+        
         self.stop_button.hide()
+        self.activateTab(1)
+        
+        self.tableWidget_2.itemSelectionChanged.connect(self.tabSelChange)
         
         self.tableWidget.setColumnWidth(0,600)
         self.tableWidget.setColumnWidth(1,200)
@@ -55,12 +99,471 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         self.tableWidget.setColumnWidth(11,100)
         self.tableWidget.setColumnWidth(12,100)
         
+        
+        self.tableWidget_2.setColumnWidth(0,600)
+        self.tableWidget_2.setColumnWidth(1,150)
+        self.tableWidget_2.setColumnWidth(2,150)
+        self.tableWidget_2.setColumnWidth(3,200)
+        self.tableWidget_2.setColumnWidth(4,150)
+        
+        self.tableWidget_3.setColumnWidth(0,200)
+        self.tableWidget_3.setColumnWidth(1,250)
+        self.tableWidget_3.setColumnWidth(2,300)
+        self.tableWidget_3.setColumnWidth(3,180)
+        self.tableWidget_3.setColumnWidth(4,150)
+        self.tableWidget_3.setColumnWidth(5,100)
+        
+        self.treeWidget.setColumnWidth(0,400)
+        self.treeWidget.setColumnWidth(1,150)
+        self.treeWidget.setColumnWidth(2,250)
+        self.treeWidget.setColumnWidth(3,200)
+        self.treeWidget.setColumnWidth(4,150)
+        
+        self.status_label = QtWidgets.QLabel()
+        self.statusbar.addWidget(self.status_label)
+        
         curr_date=QtCore.QDate.currentDate()
         self.dateEdit_2.setDate(curr_date)
         year=curr_date.year()
         begin_date=QtCore.QDate(year,1,1)
         self.dateEdit.setDate(begin_date)
         
+        self.buttons_connections=[self.button_connect,self.button_login,self.button_logout]
+        self.buttons_sending=[self.pushButton_2,self.pushButton_3,self.pushButton_5,self.pushButton_6]
+        
+        for item in [self.button_logout,self.button_login,self.pushButton_5,
+                     self.pushButton_6,self.pushButton_4,self.actionLogin,self.actionClose_connection]:
+            item.setEnabled(False)
+                    
+        try:
+            with open('data/params.txt','r') as input:
+                self.params=json.load(input)
+        except:
+            self.params={'server':'','port':0,'username':'','password':'','mail_from':'',
+                         'mail_ans':'','mail_topic':'','mail_text':'','timeout':30,
+                         'main_dir':'','zip_dir':'','log_dir':'','price':'','spectra_dir':'','report_dir':''}
+                         
+        self.set_params()
+        self.label_user.setText('')
+        
+        self.raport_button.clicked.connect(self.create_report)
+        
+    def activateTab(self,num):
+        self.stackedWidget.setCurrentIndex(num)
+        
+    def closeEvent(self,evnt):
+        evnt.ignore()
+        self.quit_app()
+
+    def quit_app(self):
+
+        msg='Do you want to quit program? This will terminate all active processes.'
+        ans=QtWidgets.QMessageBox.question(self, 'Quit', msg, 
+                                                   QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+        if ans == QtWidgets.QMessageBox.Yes:
+            sys.exit()
+            
+            
+    def show_options(self):
+        options=OptionsDialog(self)
+        if self.params:
+            options.server.setText(self.params['server'])
+            options.port.setValue(self.params['port'])
+            options.timeout.setValue(self.params['timeout'])
+            options.username.setText(self.params['username'])
+            options.password.setText(self.params['password'])
+            options.mail_from.setText(self.params['mail_from'])
+            options.mail_ans.setText(self.params['mail_ans'])
+            options.mail_topic.setText(self.params['mail_topic'])
+            options.mail_text.setText(self.params['mail_text'])
+            
+            options.main_dir.setText(self.params['main_dir'])
+            options.zip_dir.setText(self.params['zip_dir'])
+            options.log_dir.setText(self.params['log_dir'])
+            
+            options.price.setValue(self.params['price'])
+            options.spectra_dir.setText(self.params['spectra_dir'])
+            options.report_dir.setText(self.params['report_dir'])
+        options.show()
+        
+        if options.exec_():
+            self.params['server']=options.server.text()
+            self.params['port']=options.port.value()
+            self.params['timeout']=options.timeout.value()
+            self.params['username']=options.username.text()
+            self.params['password']=options.password.text()
+            self.params['mail_from']=options.mail_from.text()
+            self.params['mail_ans']=options.mail_ans.text()
+            self.params['mail_topic']=options.mail_topic.text()
+            self.params['mail_text']=options.mail_text.toPlainText()
+            
+            self.params['main_dir']=options.main_dir.text()
+            self.params['zip_dir']=options.zip_dir.text()
+            self.params['log_dir']=options.log_dir.text()
+            
+            self.params['price']=options.price.value()
+            self.params['spectra_dir']=options.spectra_dir.text()
+            self.params['report_dir']=options.report_dir.text()
+            
+            self.save_params()
+            self.set_params()
+            
+    def save_params(self):
+        with open('data/params.txt','w') as output:
+            json.dump(self.params,output)
+            
+    def set_params(self):
+        self.label_server.setText(self.params['server'])
+        self.label_port.setText('%d'%self.params['port'])
+        #self.label_user.setText(self.params['username'])
+        self.label_from.setText(self.params['mail_from'])
+        self.label_ans.setText(self.params['mail_ans'])
+        self.label_topic.setText(self.params['mail_topic'])
+        self.label_text.setText(self.params['mail_text'])
+        self.doubleSpinBox.setValue(self.params['price'])
+    ####wysylanie###
+        
+    def connect_server(self):
+        
+        self.sender=mail.MailSender(self.params['server'],self.params['port'],self.params['timeout'])
+        
+        thread=QtCore.QThread(self)
+        worker=self.mail_worker=MailWorker(self.sender,self.params)
+        #self.stop_button.clicked.connect(self.worker.kill)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.connect_to_server)
+        
+        #worker.status.connect(self.statusbar.showMessage)
+        worker.status.connect(self.status_label.setText)
+        worker.finished.connect(self.finish_connection)
+        
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        worker.finished.connect(thread.quit)
+                
+        self.button_connect.setEnabled(False)
+        self.actionConnect.setEnabled(False)
+        
+            
+        self.label_status.setText('Connecting...')
+        pixmap=QtGui.QPixmap('icons/if_Circle_Orange_34213.ico')
+        self.label_17.setPixmap(pixmap)
+            
+        thread.start()
+
+    def finish_connection(self,status):
+        if status:
+            self.label_status.setText('Connected')
+            pixmap=QtGui.QPixmap('icons/if_Circle_Yellow_34215.ico')
+            self.label_17.setPixmap(pixmap)
+
+            self.button_login.setEnabled(True)
+            self.button_logout.setEnabled(True)
+            self.actionLogin.setEnabled(True)
+            self.actionClose_connection.setEnabled(True)
+        else:
+            self.label_status.setText('Connection error')
+            pixmap=QtGui.QPixmap('icons/if_Circle_Red_34214.ico')
+            self.label_17.setPixmap(pixmap)
+            self.button_connect.setEnabled(True)
+            self.actionConnect.setEnabled(True)
+        
+    
+
+    def login_server(self):
+        
+        params=self.params.copy()
+        
+        username=params['username']
+        password=params['password']
+        
+        if not (username and password):
+            login=Login(self)
+            login.show()
+            
+            if login.exec_():
+                username=login.username.text()
+                password=login.password.text()
+                params['username']=username
+                params['password']=password
+        
+        thread=QtCore.QThread(self)
+        worker=self.mail_worker=MailWorker(self.sender,params)
+        #self.stop_button.clicked.connect(self.worker.kill)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.login)
+        
+        #self.pushButton_8.clicked.connect(thread.quit)
+        
+        #worker.status.connect(self.statusbar.showMessage)
+        worker.status.connect(self.status_label.setText)
+        worker.user_info.connect(self.label_user.setText)
+        worker.finished.connect(self.finish_login)
+        
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        worker.finished.connect(thread.quit)
+        
+        for item in [self.button_connect,self.button_login,self.button_logout,
+                     self.actionConnect,self.actionLogin,self.actionClose_connection]:
+            item.setEnabled(False)
+            
+        self.label_status.setText('Logging in...')
+        pixmap=QtGui.QPixmap('icons/if_Circle_Orange_34213.ico')
+        self.label_17.setPixmap(pixmap)
+            
+        thread.start()
+        
+    def finish_login(self,status):
+        if status:
+            self.label_status.setText('Ready')
+            pixmap=QtGui.QPixmap('icons/if_Circle_Green_34211.ico')
+            self.label_17.setPixmap(pixmap)
+            for item in [self.pushButton_5,self.pushButton_6]:
+                item.setEnabled(True)
+        else:
+            self.label_status.setText('Authentication error')
+            pixmap=QtGui.QPixmap('icons/if_Circle_Orange_34213.ico')
+            self.label_17.setPixmap(pixmap)
+            self.button_login.setEnabled(True)
+            self.actionLogin.setEnabled(True)
+        self.button_logout.setEnabled(True)
+        self.actionClose_connection.setEnabled(True)
+            
+    def close_connection(self):
+        self.sender.close()
+        self.label_status.setText('No connection')
+        pixmap=QtGui.QPixmap('icons/if_Circle_Red_34214.ico')
+        self.label_17.setPixmap(pixmap)
+        
+        self.status_label.setText('Connection closed')
+        self.button_connect.setEnabled(True)
+        self.actionConnect.setEnabled(True)
+        
+        for item in [self.button_logout,self.button_login,self.pushButton_5,self.pushButton_6,
+                     self.actionLogin,self.actionClose_connection]:
+            item.setEnabled(False)
+        self.label_user.setText('')
+        
+        
+    def tabSelChange(self):
+        selected_rows=self.tableWidget_2.selectedIndexes()
+        if selected_rows:
+            self.pushButton_4.setEnabled(True)
+        else:
+            self.pushButton_4.setEnabled(False)
+        
+    def deleteRows(self):
+        selected_rows=self.tableWidget_2.selectedIndexes()
+
+        indices=list(set([x.row() for x in selected_rows]))
+        for item in reversed(sorted(indices)):
+            self.tableWidget_2.removeRow(item)
+        
+
+    def choose_spectra(self):
+        
+        
+        file_dialog = QtWidgets.QFileDialog()
+        file_dialog.setFileMode(QtWidgets.QFileDialog.DirectoryOnly)
+        file_dialog.setOption(QtWidgets.QFileDialog.DontUseNativeDialog, True)
+        if self.params['main_dir']:
+            file_dialog.setDirectory(self.params['main_dir'])
+        
+        for view in file_dialog.findChildren((QtWidgets.QListView, QtWidgets.QTreeView)):
+            if isinstance(view.model(), QtWidgets.QFileSystemModel):
+                view.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
+#        file_view = file_dialog.findChild(QtWidgets.QListView, 'listView')
+#        
+#        # to make it possible to select multiple directories:
+#        if file_view:
+#            file_view.setSelectionMode(QtWidgets.QAbstractItemView.MultiSelection)
+#        f_tree_view = file_dialog.findChild(QtWidgets.QTreeView)
+#        if f_tree_view:
+#            f_tree_view.setSelectionMode(QtWidgets.QAbstractItemView.MultiSelection)
+        paths=None
+        if file_dialog.exec_():
+            paths = file_dialog.selectedFiles()
+            #print(paths)
+        
+        #destDir = QtWidgets.QFileDialog.getExistingDirectory(None, 
+        #                                                 'Wybierz foldery widm', 
+        #                                                 os.getcwd(), 
+        #                                                 QtWidgets.QFileDialog.ShowDirsOnly)
+        
+        for item in paths or []:
+            cur_row=self.tableWidget_2.rowCount()
+            self.tableWidget_2.insertRow(cur_row)
+            path_item=QtWidgets.QTableWidgetItem(item)
+            path_item.setTextAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignVCenter)
+            #path_item.setLayoutDirection(QtCore.Qt.RightToLeft)
+            self.tableWidget_2.setItem(cur_row,0,path_item)
+        
+    def match_user(self):
+        QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+        i=0
+        self.tableWidget_2.setSortingEnabled(False)
+        rows=self.tableWidget_2.rowCount()
+        
+        brush = QtGui.QBrush(QtGui.QColor(255, 0, 0))
+        brush.setStyle(QtCore.Qt.NoBrush)
+
+        for i in range(rows):
+            path_item=self.tableWidget_2.item(i,0)
+            #self.tableWidget.setItem(i,3,QtWidgets.QTableWidgetItem(''))
+            #self.tableWidget.setItem(i,4,QtWidgets.QTableWidgetItem(''))
+            if path_item:
+                path_text=path_item.text()
+            else:
+                path_text=''
+
+            sample_text=os.path.split(path_text)[1]
+            self.tableWidget_2.setItem(i,1,QtWidgets.QTableWidgetItem(sample_text))
+            user_text=sample_text.split('.')[0]
+            
+            result=Spectrum.find_user(user_text)
+            
+
+            user_item=QtWidgets.QTableWidgetItem(result[0])
+            if result[0]=='__undefined__':
+                user_item.setForeground(brush)
+            self.tableWidget_2.setItem(i,2,user_item)
+            
+            mail_item=QtWidgets.QTableWidgetItem(result[2])
+            if result[1]=='__undefined__':
+                mail_item.setForeground(brush)
+            self.tableWidget_2.setItem(i,3,mail_item)
+            
+            i=i+1
+            progress=i/rows
+            self.progressBar.setValue(progress*100)
+        self.tableWidget_2.setSortingEnabled(True)
+        QtWidgets.QApplication.restoreOverrideCursor()
+        
+        
+    def send_selected(self):
+        selected_rows=self.tableWidget_2.selectedIndexes()
+        indices=list(set([x.row() for x in selected_rows]))
+        col_white=QtGui.QColor(255, 255, 255)
+        for item in indices:
+            self.setRowColor(item,col_white)
+            
+        data_list=[]
+        for i in indices:
+            path_item=self.tableWidget_2.item(i,0)
+            if path_item:
+                path_text=path_item.text()
+            else:
+                path_text=''
+            mail_item=self.tableWidget_2.item(i,3)
+            if mail_item:
+                mail_text=mail_item.text()
+            else:
+                mail_text=''
+            name_item=self.tableWidget_2.item(i,1)
+            if name_item:
+                name_text=name_item.text()
+            else:
+                name_text=''
+            data_list.append((i,path_text,name_text,mail_text))
+        self.send(data_list)
+            
+    def send_all(self):
+        
+        rows=self.tableWidget_2.rowCount()
+        col_white=QtGui.QColor(255, 255, 255)
+        for item in range(rows):
+            self.setRowColor(item,col_white)
+
+        data_list=[]
+        for i in range(rows):
+            path_item=self.tableWidget_2.item(i,0)
+            if path_item:
+                path_text=path_item.text()
+            else:
+                path_text=''
+            mail_item=self.tableWidget_2.item(i,3)
+            if mail_item:
+                mail_text=mail_item.text()
+            else:
+                mail_text=''
+            name_item=self.tableWidget_2.item(i,1)
+            if name_item:
+                name_text=name_item.text()
+            else:
+                name_text=''
+            data_list.append((i,path_text,name_text,mail_text))
+        self.send(data_list)
+    
+    def send(self,data_list):
+        thread=QtCore.QThread(self)
+        worker=self.mail_worker=MailWorker(self.sender,self.params,data_list)
+        #self.stop_button.clicked.connect(self.worker.kill)
+        worker.moveToThread(thread)
+        self.tableWidget_2.setSortingEnabled(False)
+        self.pushButton_7.setEnabled(True)
+        for item in [self.button_logout,self.pushButton_2,self.pushButton_3,
+                     self.pushButton_5,self.pushButton_6,self.actionClose_connection]:
+            item.setEnabled(False)
+            
+            
+        #self.pushButton_7.clicked.connect(worker.kill)
+        self.pushButton_7.clicked.connect(self.kill_sending)
+        thread.started.connect(worker.send)
+        
+        #worker.status.connect(self.statusbar.showMessage)
+        worker.status.connect(self.status_label.setText)
+        worker.progress.connect(self.progressBar.setValue)
+        
+        worker.status_info.connect(self.show_status)
+        
+        worker.killed.connect(self.finish_sending)
+        
+        worker.finished.connect(self.finish_sending)
+        
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        worker.finished.connect(thread.quit)
+        
+        thread.start()
+    
+    def kill_sending(self):
+        self.mail_worker.abort=True
+    
+    def finish_sending(self):
+        for item in [self.button_logout,self.pushButton_2,self.pushButton_3,
+                     self.pushButton_5,self.pushButton_6,self.actionClose_connection]:
+            item.setEnabled(True)
+            
+        self.pushButton_7.setEnabled(False)
+        self.tableWidget_2.setSortingEnabled(True)
+    
+    def setRowColor(self,rowIndex,color):
+        for j in range(self.tableWidget_2.columnCount()):
+            try:
+                self.tableWidget_2.item(rowIndex, j).setBackground(color)
+            except:
+                pass
+    
+    def show_status(self,num,status):
+        brush = QtGui.QBrush(QtGui.QColor(255, 0, 0))
+        brush.setStyle(QtCore.Qt.NoBrush)
+        
+        col_red=QtGui.QColor(255, 0, 0)
+        col_yellow=QtGui.QColor(255, 224, 36)
+        col_green=QtGui.QColor(0, 205, 0)
+        
+        status_text=status[1]
+        status_item=QtWidgets.QTableWidgetItem(status_text)
+        self.tableWidget_2.setItem(num,4,status_item)
+        if status[0]==0:
+            self.setRowColor(num,col_red)
+        elif status[0]==2:
+            self.setRowColor(num,col_green)
+        else:
+            self.setRowColor(num,col_yellow)
+        
+    ####rozliczenie############################################################
         
     def export_csv(self):
         cwd=os.getcwd()
@@ -103,14 +606,13 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             for j, column in enumerate(df):
                 #print(column)
                 item_text=str(df[column][item])
-                print(item_text)
                 tab_item=QtWidgets.QTableWidgetItem(item_text)
                 if item_text=='__undefined__':
                     tab_item.setForeground(brush)
                 self.tableWidget.setItem(i,j,tab_item)
                 
     
-    def group_df(self):
+    def group_df_old(self):
         QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
         full_df=self.read_df()
         full_df['STime']=full_df['STime'].map(float)
@@ -156,10 +658,10 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             self.tableWidget.setRowCount(0)
         
     def choose_dir(self):
-        
+        directory=self.params['spectra_dir'] or os.getcwd()
         destDir = QtWidgets.QFileDialog.getExistingDirectory(None, 
                                                          'Wybierz folder do przeanalizowania', 
-                                                         os.getcwd(), 
+                                                         directory, 
                                                          QtWidgets.QFileDialog.ShowDirsOnly)
 
         self.dest_dir.setText(destDir)
@@ -231,6 +733,97 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         worker.finished.connect(thread.quit)
         thread.start()
         
+    def group_df(self):            
+        self.activateTab(3)
+        self.treeWidget.setEnabled(False)
+        
+        self.repaint()
+        
+        self.summ_df=DataFrame(columns=['Count','Times','Cost','Users'])
+        
+        QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+        
+        
+        full_df=self.read_df()
+        full_df['STime']=full_df['STime'].map(float)
+        
+        self.lineEdit.setText(self.dest_dir.text())
+        
+        if self.start:
+            self.dateEdit_3.setDate(self.start)
+        
+        if self.end:
+            self.dateEdit_4.setDate(self.end)
+        
+        
+        
+        self.treeWidget.clear()
+        header=QtWidgets.QTreeWidgetItem(["Płatnik","Liczba widm","Czas","Czas [s]","Koszt [PLN]"])
+        self.treeWidget.setHeaderItem(header)
+        
+        thread=QtCore.QThread(self)
+        worker=self.group_worker=GroupWorker(full_df)
+        worker.moveToThread(thread)
+        
+        thread.started.connect(worker.group)
+        
+        worker.progress.connect(self.progressBar.setValue)
+        worker.status.connect(self.statusbar.showMessage)
+
+        
+        worker.return_row.connect(self.group_row)
+        
+        worker.finished.connect(self.gr_finished)
+        worker.killed.connect(self.gr_finished)
+        
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        worker.finished.connect(thread.quit)
+        
+        thread.start()
+        
+    def gr_finished(self):
+        QtWidgets.QApplication.restoreOverrideCursor()
+        self.treeWidget.setEnabled(True)
+        #print(self.summ_df)
+        
+        #summary=Summary(self)
+        #summary.fill_table(grouped_df)
+        #summary.show()
+        
+    def create_report(self):
+        report_title=self.lineEdit.text()
+        
+        start=datetime.datetime.strftime(self.dateEdit_3.date().toPyDate(),'%Y-%m-%d')
+        end=datetime.datetime.strftime(self.dateEdit_4.date().toPyDate(),'%Y-%m-%d')
+    
+        cwd=self.params['report_dir'] or os.getcwd()
+        fileName = QtWidgets.QFileDialog.getSaveFileName(self, 'Zapisz raport', cwd, 'PDF (*.pdf)')[0]
+        if fileName:
+            rep_gen=report.Generator(fileName,report_title,start,end,float(self.doubleSpinBox.value()),self.summ_df)
+            rep_gen.generate_report()
+            call(["xdg-open", fileName])
+            
+        
+    def group_row(self,status,payer_list):
+        price=float(self.doubleSpinBox.value())
+        if status:
+            stime=float(payer_list[3])
+            cost=stime*price/3600
+        
+            payer_tree=QtWidgets.QTreeWidgetItem(self.treeWidget,payer_list[0:4]+['%.2f'%cost])
+            users_list=payer_list[4:]
+            for item in users_list:
+                user_tree=QtWidgets.QTreeWidgetItem(payer_tree,item)
+                payer_tree.addChild(user_tree)
+            self.treeWidget.addTopLevelItem(payer_tree)
+            
+            self.summ_df.loc[payer_list[0],'Count']=int(payer_list[1])
+            self.summ_df.loc[payer_list[0],'Times']=float(payer_list[3])
+            self.summ_df.loc[payer_list[0],'Cost']=cost
+            self.summ_df.loc[payer_list[0],'Users']=users_list
+        self.repaint()
+        
     def analyze_users(self):
         QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
         i=0
@@ -251,7 +844,7 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
                 
             result=Spectrum.find_user(user_text)
             
-            for j, item in enumerate(result):
+            for j, item in enumerate(result[0:2]):
                 tab_item=QtWidgets.QTableWidgetItem(item)
                 if item=='__undefined__':
                     tab_item.setForeground(brush)
@@ -262,7 +855,245 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             self.progressBar.setValue(progress*100)
         self.tableWidget.setSortingEnabled(True)
         QtWidgets.QApplication.restoreOverrideCursor()
+        
+    def get_open_log(self):
+        log_dir=self.params['log_dir']
+        fileName = QtWidgets.QFileDialog.getOpenFileName(self, 'Open log file', log_dir, 'Log files (*.log)')[0]
+        self.logpath.setText(fileName)
+        
+    def read_log_file(self):
+        self.tableWidget_3.clearContents()
+        self.tableWidget_3.setSortingEnabled(False)
+        fileName=self.logpath.text()
+        if fileName:
+            log_df=read_csv(fileName,sep=',',index_col='index')
+            log_df.fillna('',inplace=True)
+            for i,item in enumerate(log_df.index.tolist()):
+                time=log_df['time'][item]
+                name=log_df['spectrum'][item]
+                to=log_df['address'][item]
+                from_ad=log_df['from'][item]
+                user=log_df['by'][item]
+                status=log_df['status'][item]
+                
+                values_list=[time,name,to,from_ad,user,status]
+                rows=self.tableWidget_3.rowCount()
+                self.tableWidget_3.insertRow(rows)
+                for j, item2 in enumerate(values_list):
+                    table_item=QtWidgets.QTableWidgetItem(item2)
+                    self.tableWidget_3.setItem(i,j,table_item)
+        
+        self.tableWidget_3.setSortingEnabled(True)
 
+class GroupWorker(QtCore.QObject):
+    def __init__(self,DataFrame, *args, **kwargs):
+        QtCore.QObject.__init__(self, *args, **kwargs)
+        
+        self.df=DataFrame
+        self.abort=False
+        
+        
+    def group(self):
+        self.status.emit('Trwa generowanie podsumowania. Proszę czekać...')
+        self.progress.emit(0)
+        try:
+            grouped_df=self.df.groupby(['Payer'])['STime'].sum()
+            self.progress.emit(50)
+            total_items=len(grouped_df.index)
+            for i,item in enumerate(grouped_df.index):
+                if self.abort is True:
+                    print('process aborted')
+                    self.killed.emit()
+                    break
+                payer_spectra=self.df[self.df['Payer']==item]['STime'].count()
+                sec=grouped_df[item]
+                td=datetime.timedelta(seconds=sec)
+                payer_list=[item,'%d'%payer_spectra,str(td),'%.2f'%sec]
+                
+                #self.return_row.emit(0,payer_list)
+                
+                filtered_df=self.df[self.df['Payer']==item]                               
+                gr_filt=filtered_df.groupby(['User'])['STime'].sum()
+                for item_filt in gr_filt.index:
+                    user=item_filt
+                    no_spectra=filtered_df[filtered_df['User']==user]['STime'].count()
+                    stime=gr_filt[item_filt]
+                    td=datetime.timedelta(seconds=stime)
+                    user_list=[user,'%d'%no_spectra,str(td),'%.2f'%stime]
+                    payer_list.append(user_list)                    
+                progress=(i+1)/total_items*50+50
+                self.progress.emit(progress)
+                self.return_row.emit(1,payer_list)
+        
+                
+        except:
+            import traceback
+            self.error.emit(traceback.format_exc())
+            print(traceback.format_exc())
+            self.finished.emit(False)
+        else:
+            self.finished.emit(True)
+            self.status.emit("Zakończono generowanie podsumowania.")
+            
+        
+        
+
+    def calculate_progress(self):
+        if self.total_mails:
+            self.processed = self.processed + 1
+            percentage_new = (self.processed * 100) / self.total_mails
+            if percentage_new > self.percentage:
+                self.percentage = percentage_new
+                self.progress.emit(self.percentage)
+
+    def kill(self):
+        self.status.emit('Sending aborted')
+        self.abort = True
+
+
+
+    progress = QtCore.pyqtSignal(int)
+    status = QtCore.pyqtSignal(str)
+    error = QtCore.pyqtSignal(str)
+    killed = QtCore.pyqtSignal()
+    finished = QtCore.pyqtSignal(bool)
+    
+    return_row=QtCore.pyqtSignal(bool,list)
+    
+class MailWorker(QtCore.QObject):
+    def __init__(self,MailSenderObj, params=None, data=None, *args, **kwargs):
+        QtCore.QObject.__init__(self, *args, **kwargs)
+
+        self.sender=MailSenderObj
+
+        self.username=params['username']
+        self.password=params['password']
+        self.processed = 0
+        self.successfull=0
+        self.percentage = 0
+        
+        if data:
+            self.data=data
+            self.total_mails=len(data)
+
+        self.zip_dir=params['zip_dir']
+        self.mail_from=params['mail_from']
+        self.mail_topic=params['mail_topic']
+        self.mail_text=params['mail_text']
+        self.ans_to=params['mail_ans']
+        self.abort = False
+        self.log_dir=params['log_dir']
+        
+    def connect_to_server(self):
+        self.status.emit('Connecting to SMTP server: '+self.sender.server)
+        ans=self.sender.connect()
+        if ans[0]:
+            self.status.emit('Connection to SMTP server established')
+            self.finished.emit(True)
+        else:
+            self.status.emit('Cannot connect to SMTP server.')
+            self.finished.emit(False)
+            
+    def login(self):
+        self.status.emit('Authenticating user '+self.username+'...')
+        ans=self.sender.login(self.username,self.password)
+        if ans[0]:
+            self.status.emit('Logged in succesfully.')
+            self.user_info.emit(self.username)
+            self.finished.emit(True)
+        else:
+            self.status.emit('Login error - '+ans[1])
+            self.finished.emit(False)
+            
+    def send_all(self):
+        self.status.emit('Sending in progress...')  
+        
+        
+    def send(self):
+        try:
+            self.status.emit('Sending in progress...')
+            logfile=log.LogObject(self.log_dir)
+            for item in self.data:
+                item_no=item[0]
+                if self.abort is True:
+                    print('process aborted')
+                    self.killed.emit()
+                    self.status_info.emit(item_no,(0,'Aborted'))
+                    break
+                ##zipping
+                self.status.emit('Sending mail '+'%d'%(self.processed+1)+
+                '/'+'%d'%(self.total_mails)+'. Preparing zip archive...')
+                dir_path=item[1]
+                zip_dir=self.zip_dir
+                compressor=mail.Compressor(dir_path,zip_dir)
+                ans=compressor.zip_spectrum()
+                if ans[0]:
+                    self.status_info.emit(item_no,(1,'Archive created succesfully'))
+                else:
+                    self.status_info.emit(item_no,(0,ans[1]))
+                ###sending
+
+                if self.abort is True:
+                    self.killed.emit()
+                    self.status_info.emit(item_no,(0,'Aborted'))
+                    break
+                self.status.emit('Sending mail '+'%d'%(self.processed+1)+
+                '/'+'%d'%(self.total_mails)+'. Preparing mail message...')
+                if ans[0]:
+                    zip_path=ans[1]
+                    spectrum_name=os.path.basename(dir_path)
+                    mail_to=[item[3]]
+                    mail_from=self.mail_from
+                    mail_subj=self.mail_topic%{'name':spectrum_name}
+                    mail_text=self.mail_text%{'name':spectrum_name}
+                    ans_to=self.ans_to
+                    self.status.emit('Sending mail '+'%d'%(self.processed+1)+
+                    '/'+'%d'%(self.total_mails)+'. Sending to '+item[3]+'...')
+                    
+                    ans_mail=self.sender.send(mail_to,mail_from,mail_subj,mail_text,[zip_path],ans_to)
+                    
+                    if ans_mail[0]:
+                        self.status_info.emit(item_no,(2,'Sending completed'))
+                        self.successfull=self.successfull+1
+                        logfile.add(spectrum_name,'',item[3],mail_from,self.username,'Sent correctly')
+                    else:
+                        self.status_info.emit(item_no,(0,ans_mail[1]))
+                    
+                self.calculate_progress()
+                self.status.emit('Sending mail '+'%d'%(self.processed)+'/'+'%d'%(self.total_mails)+' completed')
+
+        except:
+            import traceback
+            self.error.emit(traceback.format_exc())
+            print(traceback.format_exc())
+            self.finished.emit(False)
+            logfile.save()
+        else:
+            self.finished.emit(True)
+            self.status.emit('Successfully sent '+'%d'%(self.successfull)+' out of '+'%d'%(self.total_mails)+' mails.')
+            logfile.save()
+        
+
+    def calculate_progress(self):
+        if self.total_mails:
+            self.processed = self.processed + 1
+            percentage_new = (self.processed * 100) / self.total_mails
+            if percentage_new > self.percentage:
+                self.percentage = percentage_new
+                self.progress.emit(self.percentage)
+
+    def kill(self):
+        self.status.emit('Sending aborted')
+        self.abort = True
+
+    progress = QtCore.pyqtSignal(int)
+    status = QtCore.pyqtSignal(str)
+    error = QtCore.pyqtSignal(str)
+    killed = QtCore.pyqtSignal()
+    finished = QtCore.pyqtSignal(bool)
+    status_info=QtCore.pyqtSignal(int,tuple)
+    user_info=QtCore.pyqtSignal(str)
+    
 
 class Worker(QtCore.QObject):
     def __init__(self, path, date_from, date_to, found=1, *args, **kwargs):
@@ -421,11 +1252,14 @@ class EditUsers(QtWidgets.QDialog, edit_users.Ui_Dialog):
             payer_id=int(user_df.loc[item,'PayID'])
             payer=user_df.loc[payer_id,'User']
             pattern=user_df.loc[item,'Patterns']
+            mail=user_df.loc[item,'Mail']
+
         
             self.tableWidget.setItem(i,0,QtWidgets.QTableWidgetItem('%d'%(item)))
             self.tableWidget.setItem(i,1,QtWidgets.QTableWidgetItem(user))
             self.tableWidget.setItem(i,2,QtWidgets.QTableWidgetItem(payer))
             self.tableWidget.setItem(i,3,QtWidgets.QTableWidgetItem(pattern))
+            self.tableWidget.setItem(i,4,QtWidgets.QTableWidgetItem(mail))
         
         self.tableWidget.setSortingEnabled(1)
         
@@ -439,12 +1273,14 @@ class EditUsers(QtWidgets.QDialog, edit_users.Ui_Dialog):
         if val:
             self.lineEdit.setEnabled(True)
             self.lineEdit_2.setEnabled(True)
+            self.lineEdit_3.setEnabled(True)
             self.comboBox.setEnabled(True)
             self.pushButton.setEnabled(True)
             self.pushButton_2.setEnabled(True)
         else:
             self.lineEdit.setEnabled(False)
             self.lineEdit_2.setEnabled(False)
+            self.lineEdit_3.setEnabled(False)
             self.comboBox.setEnabled(False)
             self.pushButton.setEnabled(False)
             self.pushButton_2.setEnabled(False)
@@ -457,6 +1293,7 @@ class EditUsers(QtWidgets.QDialog, edit_users.Ui_Dialog):
         
         self.label_num.setText('%d'%(curr_index))
         self.lineEdit.setText(user_df.loc[curr_index,'User'])
+        self.lineEdit_3.setText(user_df.loc[curr_index,'Mail'])
         self.lineEdit_2.setText(user_df.loc[curr_index,'Patterns'])
         self.comboBox.setEditText(user_df.loc[int(user_df.loc[curr_index,'PayID']),'User'])
         
@@ -485,26 +1322,29 @@ class EditUsers(QtWidgets.QDialog, edit_users.Ui_Dialog):
         self.label_num.setText('%d'%(new_index))
         self.lineEdit.setText('')
         self.lineEdit_2.setText('')
+        self.lineEdit_3.setText('')
         self.comboBox.setCurrentIndex(-1)
         
     def clear(self):
         self.label_num.setText('')
         self.lineEdit.setText('')
         self.lineEdit_2.setText('')
+        self.lineEdit_3.setText('')
         self.comboBox.setCurrentIndex(-1)
         self.set_enabled(False)
         
     def save(self):
         index=int(self.label_num.text())
         user_text=self.lineEdit.text()
-        patterns=self.lineEdit_2.text()
+        patterns=self.lineEdit_2.toPlainText()
+        mail=self.lineEdit_3.text()
         if (user_text=='' or patterns==''):
             msg_box=QtWidgets.QMessageBox.critical(self, 'Błąd', 'Uzupełnij brakujące dane!',
                                                    QtWidgets.QMessageBox.Ok)
             return
         else:
             match_user=user_df[user_df['User']==user_text]
-            match_pattern=user_df[user_df['Patterns']==patterns]
+
             if not match_user.empty:
                 user_ind=match_user.index.tolist()[0]
                 if user_ind!=index:
@@ -513,13 +1353,17 @@ class EditUsers(QtWidgets.QDialog, edit_users.Ui_Dialog):
                                                QtWidgets.QMessageBox.Ok)
                     return
                     
-            if not match_pattern.empty:
-                pattern_ind=match_pattern.index.tolist()[0]
-                if pattern_ind!=index:
-                    msg_text='Nazwa "'+patterns+'" jest już przypisana. Wybierz inną nazwę.'
-                    msg_box=QtWidgets.QMessageBox.critical(self, 'Błąd', msg_text,
-                                               QtWidgets.QMessageBox.Ok)
-                    return
+            patterns_list=patterns.split('\n')
+            for item in patterns_list:
+                find_pattern=Spectrum.find_pattern(item)
+    
+                if find_pattern:
+                    if find_pattern!=index:
+                        found_user=user_df.loc[find_pattern,'User']
+                        msg_text='Wzorzec "'+item+'" jest już przypisany do użytkownika: '+'%d'%find_pattern+' '+found_user+'. Wybierz inną nazwę.'
+                        msg_box=QtWidgets.QMessageBox.critical(self, 'Błąd', msg_text,
+                                                   QtWidgets.QMessageBox.Ok)
+                        return
                     
                     
             
@@ -538,6 +1382,7 @@ class EditUsers(QtWidgets.QDialog, edit_users.Ui_Dialog):
         user_df.loc[index,'User']=user_text
         user_df.loc[index,'Patterns']=patterns
         user_df.loc[index,'PayID']=int(payer_id)
+        user_df.loc[index,'Mail']=mail
         
 
         user_df.sort_values(by=['User'],inplace=True)
@@ -610,8 +1455,33 @@ class Summary(QtWidgets.QDialog, summary.Ui_Dialog):
                     
         return full_df
     
+
+class Login(QtWidgets.QDialog, login.Ui_Dialog):
+    
+    def __init__(self, parent=None):
+        super(Login, self).__init__(parent)
+        self.setupUi(self)
+
+class OptionsDialog(QtWidgets.QDialog, options.Ui_Dialog):
+    
+    def __init__(self, parent=None):
+        super(OptionsDialog, self).__init__(parent)
+        self.setupUi(self)
+        
+        self.choose_main.clicked.connect(lambda: self.choose_dir(self.main_dir))
+        self.choose_zip.clicked.connect(lambda: self.choose_dir(self.zip_dir))
+        self.choose_log.clicked.connect(lambda: self.choose_dir(self.log_dir))
+        self.choose_spectr_dir.clicked.connect(lambda: self.choose_dir(self.spectra_dir))
+        self.choose_report_dir.clicked.connect(lambda: self.choose_dir(self.report_dir))
                     
-                    
+    def choose_dir(self,input_widget):
+        destDir=None
+        destDir = QtWidgets.QFileDialog.getExistingDirectory(None, 
+                                                         'Choose directory', 
+                                                         os.getcwd(), 
+                                                         QtWidgets.QFileDialog.ShowDirsOnly)
+        if destDir:
+            input_widget.setText(destDir)
 class Spectrum(object):
     
     def __init__(self,path):
@@ -628,20 +1498,40 @@ class Spectrum(object):
         self.end_time=None
         self.analyze()
         
+    def find_pattern(text):
+        #user_match=user_df[user_df['Patterns'].str.lower()==text.lower()]
+        #if user_match.empty():
+        user_match=user_df[user_df['Patterns'].str.contains(text,case=False,regex=False)]
+        if not user_match.empty:
+            ids_list=user_match.index.tolist()
+            matched_id=None
+            for item in ids_list:
+                pattern=user_df.loc[item,'Patterns']
+                patt_list=pattern.split('\n')
+                for pat_item in patt_list:
+                    if pat_item.strip().lower()==text.lower():
+                        matched_id=item
+                        break
+                if matched_id:
+                    break
+            return matched_id
+        else:
+            return None
+        
         
     def find_user(text):
-        
-        user_match=user_df[user_df['Patterns'].str.lower()==text.lower()]
-        if not user_match.empty:
-            user_id=user_match.index.tolist()[0]
+        user_id=Spectrum.find_pattern(text)
+        if user_id:
             user=user_df.loc[user_id,'User']
             payer_id=int(user_df.loc[user_id,'PayID'])
             payer=user_df.loc[payer_id,'User']
+            mail=user_df.loc[user_id,'Mail']
         else:
             user='__undefined__'
             payer='__undefined__'
-        
-        return (user,payer)
+            mail='__undefined__'
+            
+        return (user,payer,mail)
         
     def get_values(self):
         
@@ -817,10 +1707,6 @@ class Spectrum(object):
                     
                     
             
-
-
-
-
 def excepthookA(excType, excValue, tracebackobj):
     """
     Global function to catch unhandled exceptions.
@@ -851,16 +1737,16 @@ def excepthookA(excType, excValue, tracebackobj):
     errorbox.exec_()
 
 
-sys.excepthook = excepthookA
+#sys.excepthook = excepthookA
 
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
     
-    qt_translator = QtCore.QTranslator()
-    qt_translator.load("qt_pl",QtCore.QLibraryInfo.location(QtCore.QLibraryInfo.TranslationsPath))
-    app.installTranslator(qt_translator)
-    
+    #qt_translator = QtCore.QTranslator()
+    #qt_translator.load("qt_pl",QtCore.QLibraryInfo.location(QtCore.QLibraryInfo.TranslationsPath))
+    #app.installTranslator(qt_translator)
+    print(QtWidgets.QStyleFactory.keys())
     #app.setStyle(QtWidgets.QStyleFactory.create('Breeze'))
       
     form = App()
