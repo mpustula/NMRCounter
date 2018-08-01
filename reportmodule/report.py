@@ -5,6 +5,7 @@ Created on Wed May 23 21:16:12 2018
 @author: marcin
 """
 import datetime
+import os
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.enums import TA_JUSTIFY
@@ -17,7 +18,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 
 class Generator(object):
-    def __init__(self,path,title,date_from,date_to,price,data_df=None):
+    def __init__(self,path,title,date_from,date_to,price,data_df=None,full_df=None):
         self.path=path
         self.title=title
         self.date_from=date_from
@@ -27,18 +28,23 @@ class Generator(object):
         self.total_sec=0
         self.data_df=data_df
         
+        self.full_df=full_df
+        
         self.data_list=[]
 
+        ############################################################zmienione pod windows
         
+        self.dir=os.getcwd()
+        #print('Working dir: ',self.dir)
         
-        self.dir='/home/marcin/Dokumenty/projekty/NMRSpectrumCount/mail_test/'
-        
-        
-        roboto_font=r"/home/marcin/Dokumenty/projekty/NMRSpectrumCount/fonts/Roboto/Roboto-Regular.ttf"
+        roboto_font=os.path.join(self.dir,"fonts\Roboto\Roboto-Regular.ttf")
         pdfmetrics.registerFont(TTFont("Roboto Regular",roboto_font))
         
-        roboto_bold=r"/home/marcin/Dokumenty/projekty/NMRSpectrumCount/fonts/Roboto/Roboto-Bold.ttf"
+        roboto_bold=os.path.join(self.dir,"fonts\Roboto\Roboto-Bold.ttf")
         pdfmetrics.registerFont(TTFont("Roboto Bold",roboto_bold))
+        
+        roboto_cond=os.path.join(self.dir,"fonts\Roboto_Condensed\RobotoCondensed-Regular.ttf")
+        pdfmetrics.registerFont(TTFont("Roboto Condensed Regular",roboto_cond))
         
         
     @staticmethod
@@ -46,20 +52,29 @@ class Generator(object):
         # Save the state of our canvas so we can draw on it
         canvas.saveState()
         styles = getSampleStyleSheet()
+        
+        styles.add(ParagraphStyle(name='MainStyle',
+                                       fontName='Roboto Regular',
+                                       fontSize=8,
+                                       leading=8))
  
         #Header
-        header = Paragraph('', styles['Normal'])
+        header = Paragraph('Pracownia Spektroskopii NMR', styles['MainStyle'])
         w, h = header.wrap(doc.width, doc.topMargin)
-        header.drawOn(canvas, doc.leftMargin, doc.height + doc.topMargin)
+        header.drawOn(canvas, doc.leftMargin, doc.height + 1.5*doc.topMargin)
         
- 
-        # Footer
-        footer = Paragraph('', styles['Normal'])
+        current_time=datetime.datetime.now()
+        c_time=current_time.strftime("%Y-%m-%d %H:%M:%S")
+        #Footer
+        footer = Paragraph('Dokument wygenerowano '+c_time, styles['MainStyle'])
         w, h = footer.wrap(doc.width, doc.bottomMargin)
-        footer.drawOn(canvas, doc.leftMargin, h)
+        footer.drawOn(canvas, doc.leftMargin, 15*mm)
  
         # Release the canvas
         canvas.restoreState()
+        
+    def save_df(self):
+        self.data_df.to_csv(self.path.split('.')[0]+'.csv')
         
     def calculate_df(self):
         self.data_df.sort_values(by='Times',inplace=True)
@@ -70,6 +85,33 @@ class Generator(object):
             self.data_list.append([item,self.data_df.loc[item,'Count'],
                                    self.timeformat(self.data_df.loc[item,'Times']),
                                    '%.2f'%self.data_df.loc[item,'Cost']])
+                                   
+    def filter_full_df(self,payer):
+        full_list=[]
+        df=self.full_df[self.full_df['Payer']==payer]
+        df=df[['Spectrum','Date','User','STime','EXP','NS']]
+        df.sort_values(by=['User','Date'],inplace=True)
+        
+        
+        for item in df.index.tolist():
+            path=df.loc[item,'Spectrum']
+            #print(path)
+            sample_full_name=os.path.split(path)[0]
+            #print(sample_full_name)
+            sample_name=os.path.split(sample_full_name)[1]
+            
+            
+            date=df.loc[item,'Date'].split()[0]
+            user=df.loc[item,'User']
+            ftime=self.timeformat(df.loc[item,'STime'])
+            exp=df.loc[item,'EXP']
+            ns='%d'%df.loc[item,'NS']
+            
+            list_item=[sample_name,date,user,ftime,ns,exp]
+            
+            full_list.append(list_item)
+            
+        return full_list
                                    
     def calculate_users(self):
         users_list=[]
@@ -87,7 +129,100 @@ class Generator(object):
         hours=times/3600
         return '%0.2f'%hours+' h ('+str(td).split('.')[0]+')'
         
+    def partial_report(self,path,payer,count,time,table):
+        
+        style = getSampleStyleSheet()
+        width, height = A4
+        
+        doc = SimpleDocTemplate(path,pagesize=A4,
+                        rightMargin=72,leftMargin=72,
+                        topMargin=72,bottomMargin=72)
+                        
+        style_sheet = getSampleStyleSheet()
+        style_sheet.add(ParagraphStyle(name='MainStyle',
+                                       fontName='Roboto Regular',
+                                       fontSize=10,
+                                       leading=12))
+
+        style_sheet.add(ParagraphStyle(name='Justify', alignment=TA_JUSTIFY))
+        
+        cont=[]
+        
+        title_str='<font name="Roboto Bold" size="12">Podsumowanie rozliczenia pomiarów zleconych</font>'
+        title_par=Paragraph(title_str,style=style["Normal"])
+        
+        cont.append(title_par)
+        cont.append(Spacer(1,12*mm))
+        
+        info_data=[["Płatnik:",payer],
+                   ['Rodzaj zlecenia:',self.title],
+                   ['Za okres:', self.date_from+' - '+self.date_to],
+                   ['Stawka 1h pomiaru [PLN]:','%.2f'%self.price]]
+                   
+        info_table=Table(info_data,[60*mm,100*mm],4*[8*mm],hAlign='LEFT')
+        
+        summ_data=[['Całkowita liczba zarejestrowanych widm:',count],
+                   ['Całkowity czas trwania:', self.timeformat(time)],
+                   ['Koszt całkowity [PLN]:','%.2f'%(time/3600*self.price)]]
+                   
+        summ_table=Table(summ_data,[80*mm,100*mm],3*[8*mm],hAlign='LEFT')
+        
+        info_table.setStyle(TableStyle([('FONT',(0,0),(1,2),'Roboto Regular'),
+                                        ('FONT',(1,0),(1,2),'Roboto Bold')]))
+        summ_table.setStyle(TableStyle([('FONT',(0,0),(1,2),'Roboto Regular'),
+                                        ('FONT',(1,0),(1,2),'Roboto Bold')]))
+        
+        cont.append(info_table)
+        cont.append(Spacer(1,10*mm))
+        cont.append(summ_table)
+        cont.append(Spacer(1,10*mm))
+        
+        det_str='<font name="Roboto Bold" size="10">Rozliczenie szczegółowe z podziałem na użytkowników:</font>'
+        det_par=Paragraph(det_str,style=style["Normal"])
+                
+        cont.append(Spacer(1,12*mm))
+        cont.append(det_par)
+        cont.append(Spacer(1,5*mm))
+        
+        cont.append(table)
+        cont.append(Spacer(1,6*mm))
+        
+        full_str='<font name="Roboto Bold" size="10">Pełne dane dotyczące zarejestrowanych widm:</font>'
+        full_par=Paragraph(full_str,style=style["Normal"])
+                
+        cont.append(Spacer(1,6*mm))
+        cont.append(full_par)
+        cont.append(Spacer(1,5*mm))
+        
+        data=self.filter_full_df(payer)
+              
+        header=['Nazwa próbki','Data','Użytkownik','Czas trwania','Skany','Eksperyment']
+        data.append(header)
+        
+        data_len=len(data)
+
+
+        col_width=width-doc.leftMargin-doc.rightMargin-300
+      
+        t=Table(data[::-1],[col_width,45,70,60,25,100],data_len*[4*mm],hAlign='LEFT')
+
+        t.setStyle(TableStyle([('BACKGROUND',(0,0),(5,0),colors.grey),
+                               ('FONT',(0,0),(-1,-1),'Roboto Condensed Regular'),
+                               ('FONTSIZE',(0,0),(-1,-1),7),
+                               ('ALIGN',(0,0),(-1,-1),'LEFT'),
+                               ('VALIGN',(0,0),(-1,-1),'MIDDLE'),
+                               ('INNERGRID', (0,0), (-1,-1), 0.25, colors.black),
+                               ('BOX', (0,0), (-1,-1), 0.25, colors.black)]))
+
+
+        cont.append(t)
+        
+        
+            
+        doc.build(cont,onFirstPage=self._header_footer,onLaterPages=self._header_footer,canvasmaker=NumberedCanvas)
+        
     def generate_report(self):
+        self.save_df()
         self.calculate_df()
         style = getSampleStyleSheet()
         width, height = A4
@@ -105,44 +240,9 @@ class Generator(object):
         style_sheet.add(ParagraphStyle(name='Justify', alignment=TA_JUSTIFY))
                         
         cont=[]
-#    
-#        canv=canvas.Canvas("form.pdf", pagesize=A4,bottomup=0)
-#        canv.setLineWidth(.3)
-#        canv.setFont('Roboto Regular', 10)
-#         
-#        canv.drawString(30,50,'Pracownia Spektroskopii NMR')
-#        #canv.drawString(30,735,'Wydział Chemii UJ')
-#        canv.drawString(500,50,"12/12/2010")
-#        canv.line(30,53,width-30,53)
-#
-#
-#        canv.drawString(30,100,"Rodzaj zlecenia: ") 
-#        canv.drawString(30,120,"Za okres: ")
-#        
-#        
-#        canv.drawString(30,160,"Opłata za 1h pomiaru [PLN]: ")
-#        
-#        canv.drawString(30,200,"Całkowita liczba zarejestrowanych widm: ")
-#        canv.drawString(30,220,"Całkowity czas trwania: ")
-#        canv.drawString(30,240,"Całkowity koszt [PLN]: ")
-#        
-#        canv.drawString(30,300,"Rozliczenie ")
-#        
-#        
-#        canv.setFont('Roboto Bold', 10)
-#        
-#        canv.drawString(120,100,self.title)
-#        canv.drawString(120,120,self.date_from+' - '+self.date_to)
         
         title_str='<font name="Roboto Bold" size="12">Podsumowanie rozliczenia pomiarów zleconych</font>'
         title_par=Paragraph(title_str,style=style["Normal"])
-        
-        
-        
-        
-#        title_par.wrapOn(canv,width,height)
-#        title_par.drawOn(canv,30, 80, mm)
-        
         
         cont.append(title_par)
         cont.append(Spacer(1,12*mm))
@@ -190,6 +290,7 @@ class Generator(object):
 
         cont.append(t)
         
+        #tabele_szczegolowe
         
         det_str='<font name="Roboto Bold" size="10">Rozliczenie szczegółowe:</font>'
         det_par=Paragraph(det_str,style=style["Normal"])
@@ -218,28 +319,16 @@ class Generator(object):
             cont.append(u)
             cont.append(Spacer(1,12*mm))
             
+            partial_name=self.path.split('.')[0].replace(' ','_')+'_'+item[0].replace(', ','_')+'.pdf'
+            
+            self.partial_report(partial_name,item[0],self.data_df.loc[item[0],'Count'],
+                                self.data_df.loc[item[0],'Times'],u)
+            
             
             
                 
         doc.build(cont,onFirstPage=self._header_footer,onLaterPages=self._header_footer,canvasmaker=NumberedCanvas)
         
-#        t_str='<font name="Roboto Bold" size="10">%s</font>'%self.title
-#        
-#        t_par=Paragraph(t_str,style=style['Normal'])
-#        t_par.wrapOn(canv,width,height)
-#        t_par.drawOn(canv,120, 100, mm)
-#        
-#        
-#        
-#        czas_str=('<font name="Roboto Bold" size="10">%s - %s</font>')%(self.date_from,self.date_to)
-#        
-#        
-#        
-#        c_par=Paragraph(czas_str,style=style['Normal'])
-#        c_par.wrapOn(canv,width,height)
-#        c_par.drawOn(canv,120, 120, mm)
-         
-        #canv.save()
         
     def standardFonts(self):
         """
@@ -317,7 +406,7 @@ def main():
     #dto=input("To:")
     #price=input("Price per hour:")
     
-    report_generator=Generator('Zmieniacz 2018','01-01-2018','30-06-2018',5)
+    report_generator=Generator("test.pdf",'Zmieniacz 2018','01-01-2018','30-06-2018',5)
     report_generator.generate_report()
     
 if __name__ == '__main__':              # if we're running file directly and not importing it

@@ -5,7 +5,7 @@ Created on Thu Mar  1 17:04:57 2018
 @author: marcin
 """
 import sys
-import os.path
+import os
 import time, datetime
 import dateutil.parser as dparser
 import re
@@ -103,8 +103,9 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         self.tableWidget_2.setColumnWidth(0,600)
         self.tableWidget_2.setColumnWidth(1,150)
         self.tableWidget_2.setColumnWidth(2,150)
-        self.tableWidget_2.setColumnWidth(3,200)
+        self.tableWidget_2.setColumnWidth(3,300)
         self.tableWidget_2.setColumnWidth(4,150)
+        self.tableWidget_2.setColumnWidth(5,400)
         
         self.tableWidget_3.setColumnWidth(0,200)
         self.tableWidget_3.setColumnWidth(1,250)
@@ -261,15 +262,48 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             self.button_logout.setEnabled(True)
             self.actionLogin.setEnabled(True)
             self.actionClose_connection.setEnabled(True)
+            self.current_pixmap=QtGui.QPixmap('icons/if_Circle_Yellow_34215.ico')
+            self.status_control()
         else:
             self.label_status.setText('Connection error')
             pixmap=QtGui.QPixmap('icons/if_Circle_Red_34214.ico')
             self.label_17.setPixmap(pixmap)
             self.button_connect.setEnabled(True)
             self.actionConnect.setEnabled(True)
+            
         
-    
+    def status_control(self):
+        thread=QtCore.QThread(self)
+        worker=self.status_worker=StatusControlWorker(self.sender)
 
+        worker.moveToThread(thread)
+        thread.started.connect(worker.start_status_control)
+                
+        worker.finished.connect(self.close_server_connection)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        worker.finished.connect(thread.quit)
+        
+        worker.status_info.connect(self.status_color)
+        
+        thread.start()
+            
+
+    def status_color(self,status_info):
+        status_code=status_info[0]
+        if status_code==9:
+            pixmap=QtGui.QPixmap('icons/if_Circle_Empty_34217.ico')
+            self.label_17.setPixmap(pixmap)
+        elif status_code==0:
+            pixmap=QtGui.QPixmap('icons/if_Circle_Red_34214.ico')
+            self.label_17.setPixmap(pixmap)
+            self.label_status.setText(status_info[1])
+            self.close_connection()
+        elif status_code==1:
+            self.label_17.setPixmap(self.current_pixmap)
+            #self.repaint()
+        
+        
     def login_server(self):
         
         params=self.params.copy()
@@ -319,23 +353,26 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             self.label_status.setText('Ready')
             pixmap=QtGui.QPixmap('icons/if_Circle_Green_34211.ico')
             self.label_17.setPixmap(pixmap)
+            self.current_pixmap=QtGui.QPixmap('icons/if_Circle_Green_34211.ico')
             for item in [self.pushButton_5,self.pushButton_6]:
                 item.setEnabled(True)
         else:
             self.label_status.setText('Authentication error')
             pixmap=QtGui.QPixmap('icons/if_Circle_Orange_34213.ico')
+            
             self.label_17.setPixmap(pixmap)
+            self.current_pixmap=QtGui.QPixmap('icons/if_Circle_Orange_34213.ico')
             self.button_login.setEnabled(True)
             self.actionLogin.setEnabled(True)
         self.button_logout.setEnabled(True)
         self.actionClose_connection.setEnabled(True)
             
     def close_connection(self):
-        self.sender.close()
-        self.label_status.setText('No connection')
-        pixmap=QtGui.QPixmap('icons/if_Circle_Red_34214.ico')
-        self.label_17.setPixmap(pixmap)
-        
+        if self.status_worker:
+            self.status_worker.abort=True
+            
+    def close_server_connection(self):
+        self.sender.close()               
         self.status_label.setText('Connection closed')
         self.button_connect.setEnabled(True)
         self.actionConnect.setEnabled(True)
@@ -344,6 +381,10 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
                      self.actionLogin,self.actionClose_connection]:
             item.setEnabled(False)
         self.label_user.setText('')
+
+        self.label_status.setText('No connection')
+        pixmap=QtGui.QPixmap('icons/if_Circle_Red_34214.ico')
+        self.label_17.setPixmap(pixmap)
         
         
     def tabSelChange(self):
@@ -373,31 +414,23 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         for view in file_dialog.findChildren((QtWidgets.QListView, QtWidgets.QTreeView)):
             if isinstance(view.model(), QtWidgets.QFileSystemModel):
                 view.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
-#        file_view = file_dialog.findChild(QtWidgets.QListView, 'listView')
-#        
-#        # to make it possible to select multiple directories:
-#        if file_view:
-#            file_view.setSelectionMode(QtWidgets.QAbstractItemView.MultiSelection)
-#        f_tree_view = file_dialog.findChild(QtWidgets.QTreeView)
-#        if f_tree_view:
-#            f_tree_view.setSelectionMode(QtWidgets.QAbstractItemView.MultiSelection)
+
         paths=None
         if file_dialog.exec_():
             paths = file_dialog.selectedFiles()
-            #print(paths)
-        
-        #destDir = QtWidgets.QFileDialog.getExistingDirectory(None, 
-        #                                                 'Wybierz foldery widm', 
-        #                                                 os.getcwd(), 
-        #                                                 QtWidgets.QFileDialog.ShowDirsOnly)
-        
+
         for item in paths or []:
             cur_row=self.tableWidget_2.rowCount()
             self.tableWidget_2.insertRow(cur_row)
+            
             path_item=QtWidgets.QTableWidgetItem(item)
             path_item.setTextAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignVCenter)
             #path_item.setLayoutDirection(QtCore.Qt.RightToLeft)
             self.tableWidget_2.setItem(cur_row,0,path_item)
+            directory_size=mail.Compressor.calculate_size(item)
+            size_item=QtWidgets.QTableWidgetItem('%.2f MB'%(float(directory_size)/1000000))
+            self.tableWidget_2.setItem(cur_row,4,size_item)
+            
         
     def match_user(self):
         QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
@@ -465,7 +498,12 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
                 name_text=name_item.text()
             else:
                 name_text=''
-            data_list.append((i,path_text,name_text,mail_text))
+            size_item=self.tableWidget_2.item(i,4)
+            if size_item:
+                size_text=size_item.text()
+            else:
+                size_text=''    
+            data_list.append((i,path_text,name_text,mail_text,size_text))
         self.send(data_list)
             
     def send_all(self):
@@ -492,10 +530,39 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
                 name_text=name_item.text()
             else:
                 name_text=''
-            data_list.append((i,path_text,name_text,mail_text))
+            size_item=self.tableWidget_2.item(i,4)
+            if size_item:
+                size_text=size_item.text()
+            else:
+                size_text='' 
+            data_list.append((i,path_text,name_text,mail_text,size_text))
         self.send(data_list)
+        
+    def filter_data(self,data_list):
+        new_list=[]
+        for i,item in enumerate(data_list):
+            size_text=item[4]
+            name_text=item[2]
+            size_obj=re.search(r'^(.*) MB',size_text)
+            if size_obj:
+                size=float(size_obj.groups()[0])
+            else:
+                size=0
+            if size>20:
+                msg='The total size of the directory corresponding to spectrum '+ \
+                    name_text+' is greater than 20 MB, and probably will be rejected by server. Do you really want to try to send these spectrum as a e-mail message?'
+                ans=QtWidgets.QMessageBox.warning(self, 'Spectrum size warning', msg, 
+                                                   QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,QtWidgets.QMessageBox.No)
+                if ans == QtWidgets.QMessageBox.Yes:
+                    new_list.append(item)
+            else:
+                new_list.append(item)
+                    
+        
+        return new_list
     
-    def send(self,data_list):
+    def send(self,raw_data_list):
+        data_list=self.filter_data(raw_data_list)
         thread=QtCore.QThread(self)
         worker=self.mail_worker=MailWorker(self.sender,self.params,data_list)
         #self.stop_button.clicked.connect(self.worker.kill)
@@ -555,7 +622,7 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         
         status_text=status[1]
         status_item=QtWidgets.QTableWidgetItem(status_text)
-        self.tableWidget_2.setItem(num,4,status_item)
+        self.tableWidget_2.setItem(num,5,status_item)
         if status[0]==0:
             self.setRowColor(num,col_red)
         elif status[0]==2:
@@ -647,15 +714,28 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
     def edit_users(self):
         
         users_dialog=EditUsers(self)
-        users_dialog.show()       
+        users_dialog.show()     
+        
+    def mainTabSelChange(self):
+        selected_rows=self.tableWidget.selectedIndexes()
+        if selected_rows:
+            self.del_button.setEnabled(True)
+        else:
+            self.del_button.setEnabled(False)
+        
+
         
     def clear_table(self):
-        msg='Czy na pewno chcesz usunąć wszystkie dane?'
-        ans=QtWidgets.QMessageBox.question(self, 'Wyczyść', msg, 
+        msg='Czy na pewno chcesz usunąć wybrane wiersze?'
+        ans=QtWidgets.QMessageBox.question(self, 'Usuń dane', msg, 
                                                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
         if ans == QtWidgets.QMessageBox.Yes:
-            self.tableWidget.clearContents()
-            self.tableWidget.setRowCount(0)
+            selected_rows=self.tableWidget.selectedIndexes()
+
+            indices=list(set([x.row() for x in selected_rows]))
+            for item in reversed(sorted(indices)):
+                self.tableWidget.removeRow(item)
+            
         
     def choose_dir(self):
         directory=self.params['spectra_dir'] or os.getcwd()
@@ -747,6 +827,14 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         full_df=self.read_df()
         full_df['STime']=full_df['STime'].map(float)
         
+        self.full_df=full_df
+
+        for item in full_df.index.tolist():
+            user=full_df.loc[item,'User']
+            if user=="__undefined__":
+                username=full_df.loc[item,'Username']
+                full_df.loc[item,'User']=username
+        
         self.lineEdit.setText(self.dest_dir.text())
         
         if self.start:
@@ -800,9 +888,13 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         cwd=self.params['report_dir'] or os.getcwd()
         fileName = QtWidgets.QFileDialog.getSaveFileName(self, 'Zapisz raport', cwd, 'PDF (*.pdf)')[0]
         if fileName:
-            rep_gen=report.Generator(fileName,report_title,start,end,float(self.doubleSpinBox.value()),self.summ_df)
+            rep_gen=report.Generator(fileName,report_title,start,end,float(self.doubleSpinBox.value()),self.summ_df,self.full_df)
             rep_gen.generate_report()
-            call(["xdg-open", fileName])
+            if sys.platform.startswith('linux'):
+                call(["xdg-open", fileName])
+            else:
+                os.startfile(fileName)
+
             
         
     def group_row(self,status,payer_list):
@@ -960,6 +1052,47 @@ class GroupWorker(QtCore.QObject):
     
     return_row=QtCore.pyqtSignal(bool,list)
     
+class StatusControlWorker(QtCore.QObject):
+    def __init__(self,MailSenderObj, *args, **kwargs):
+        QtCore.QObject.__init__(self, *args, **kwargs)
+        
+        self.sender=MailSenderObj
+        self.abort=False
+        self.interval=150
+        
+        self.check_server()
+        
+    def start_status_control(self):
+        while not self.abort:
+            delta=datetime.datetime.now()-self.last_check
+            if delta.total_seconds()>self.interval:
+                self.check_server()
+            time.sleep(1)
+            self.status_info.emit(self.status_ans)
+            time.sleep(0.5)
+            self.status_info.emit((9,"Empty blink"))
+        else:
+            self.finished.emit(True)
+            
+    def check_server(self):
+        print(datetime.datetime.now(), 'Checking server response status...')
+        status_ans=self.sender.status()
+        self.status_ans=status_ans
+        print(status_ans)
+        self.last_check=datetime.datetime.now()
+            
+    def kill(self):
+        self.abort = True
+        self.finished.emit(True)
+
+    progress = QtCore.pyqtSignal(int)
+    status = QtCore.pyqtSignal(str)
+    error = QtCore.pyqtSignal(str)
+    killed = QtCore.pyqtSignal()
+    finished = QtCore.pyqtSignal(bool)
+    status_info=QtCore.pyqtSignal(tuple)
+                
+    
 class MailWorker(QtCore.QObject):
     def __init__(self,MailSenderObj, params=None, data=None, *args, **kwargs):
         QtCore.QObject.__init__(self, *args, **kwargs)
@@ -1004,6 +1137,7 @@ class MailWorker(QtCore.QObject):
         else:
             self.status.emit('Login error - '+ans[1])
             self.finished.emit(False)
+            
             
     def send_all(self):
         self.status.emit('Sending in progress...')  

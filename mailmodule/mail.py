@@ -31,6 +31,20 @@ class MailSender(object):
             self.server_obj=server
             return (1,'Connected')
             
+    def status(self):
+        if self.server_obj:
+            try:
+                status_ans=self.server_obj.ehlo()
+            except smtplib.SMTPServerDisconnected:
+                return (0,'Connection lost')
+            status_code=status_ans[0]
+            if status_code==250:
+                return (1,status_ans[1])
+            else:
+                return (0,status_ans[1])
+        else:
+            return (0,'No server connection found')
+            
             
             
     def login(self,username,password):
@@ -137,20 +151,34 @@ class Compressor(object):
                 arcname=os.path.join(rootdir,parentpath)
                 ziph.write(filepath,arcname)
                 
+    def calculate_size(path):
+        total_size = 0
+        for dirpath, dirnames, filenames in os.walk(path):
+            for f in filenames:
+                fp = os.path.join(dirpath, f)
+                total_size += os.path.getsize(fp)
+        return total_size
+                
 
 def main_m():
     server=input('Server: ')
     port=input('Port: ')
     
-    sender=MailSender(server,port)
+    sender=MailSender(server,port,30)
+    sender.status()    
+    
     sender.connect()
+    
+    sender.status()
     
     login=input('login:')
     password=input('password')
     
     sender.login(login,password)
     print('login')
-    sender.send(['marcin.pustula@doctoral.uj.edu.pl'],'marcin.pustula@doctoral.uj.edu.pl','test message','message')
+    sender.status()
+    sender.login(login,password)
+    #sender.send(['marcin.pustula@doctoral.uj.edu.pl'],'marcin.pustula@doctoral.uj.edu.pl','test message','message')
     print('message sent')
 
 def main_c():

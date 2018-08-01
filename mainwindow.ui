@@ -18,7 +18,7 @@
     <item>
      <widget class="QStackedWidget" name="stackedWidget">
       <property name="currentIndex">
-       <number>3</number>
+       <number>1</number>
       </property>
       <widget class="QWidget" name="page">
        <layout class="QVBoxLayout" name="verticalLayout_2">
@@ -32,8 +32,8 @@
             <rect>
              <x>0</x>
              <y>0</y>
-             <width>524</width>
-             <height>293</height>
+             <width>1265</width>
+             <height>726</height>
             </rect>
            </property>
            <layout class="QVBoxLayout" name="verticalLayout_3">
@@ -88,6 +88,9 @@
                  <font>
                   <pointsize>9</pointsize>
                  </font>
+                </property>
+                <property name="selectionBehavior">
+                 <enum>QAbstractItemView::SelectRows</enum>
                 </property>
                 <property name="sortingEnabled">
                  <bool>true</bool>
@@ -201,13 +204,6 @@
                   </property>
                  </spacer>
                 </item>
-                <item>
-                 <widget class="QPushButton" name="del_button">
-                  <property name="text">
-                   <string>Wyczyść</string>
-                  </property>
-                 </widget>
-                </item>
                </layout>
               </item>
               <item row="0" column="6">
@@ -268,6 +264,13 @@
                    </size>
                   </property>
                  </spacer>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="del_button">
+                  <property name="text">
+                   <string>Usuń wiersze</string>
+                  </property>
+                 </widget>
                 </item>
                </layout>
               </item>
@@ -658,6 +661,11 @@
           <column>
            <property name="text">
             <string>Mail</string>
+           </property>
+          </column>
+          <column>
+           <property name="text">
+            <string>Total size</string>
            </property>
           </column>
           <column>

@@ -22,10 +22,10 @@ class LogObject(object):
         
     def open_log(self):
         try:
-            df=pd.read_csv(self.path,index_col='index')
+            df=pd.read_csv(self.path,index_col=0)
         except:
-            df=pd.DataFrame(columns=['index','time','spectrum','user','address','from','by','status'])
-            df.to_csv(self.path,index='index')
+            df=pd.DataFrame(columns=['time','spectrum','user','address','from','by','status'])
+            df.to_csv(self.path)
         self.df=df
         
     def add(self,spectrum,user,address,frommail,by,status):
@@ -44,8 +44,9 @@ class LogObject(object):
         
         
 def main():
-    log=LogObject('/home/marcin/Dokumenty/programy/NMRSpectrumCount/data/logs/')        
-
+    log=LogObject('/home/marcin/Dokumenty/projekty/NMRSpectrumCount/data/logs/')        
+    log.add('test','marcin','test@mail','nmr@chemia','nmr','Sent correctly')
+    log.save()
 
 if __name__ == '__main__':              # if we're running file directly and not importing it
     main()
