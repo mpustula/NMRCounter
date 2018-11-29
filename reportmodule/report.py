@@ -6,6 +6,7 @@ Created on Wed May 23 21:16:12 2018
 """
 import datetime
 import os
+import pandas as pd
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.enums import TA_JUSTIFY
@@ -16,6 +17,27 @@ from reportlab.platypus import Paragraph, Table, TableStyle, SimpleDocTemplate, 
 from reportlab.lib.units import mm
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
+
+class DFConnector(object):
+    def __init__(self,result_file,init_files):
+        self.result=result_file
+        self.files=init_files
+        self.dfs=[]
+        
+    def merge(self):
+        for file in self.files:
+            name=os.path.basename(file).split('.')[0]
+            print(name)
+            df=pd.read_csv(file,index_col=0)
+            df.rename(index=str,columns={"Cost":name},inplace=True)
+            df=df[name].fillna(0)
+            print(df)
+            
+            self.dfs.append(df)
+        
+        merged_df=pd.concat(self.dfs,axis=1)
+        
+        merged_df.to_csv(self.result)
 
 class Generator(object):
     def __init__(self,path,title,date_from,date_to,price,data_df=None,full_df=None):
@@ -398,7 +420,7 @@ class NumberedCanvas(canvas.Canvas):
         self.drawRightString(190 * mm, 15 * mm,
         "Strona %d/%d" % (self._pageNumber, page_count))
         
-        
+
         
 def main():
     #title=input('Title')
@@ -406,8 +428,11 @@ def main():
     #dto=input("To:")
     #price=input("Price per hour:")
     
-    report_generator=Generator("test.pdf",'Zmieniacz 2018','01-01-2018','30-06-2018',5)
-    report_generator.generate_report()
+    #report_generator=Generator("test.pdf",'Zmieniacz 2018','01-01-2018','30-06-2018',5)
+    #report_generator.generate_report()
+    
+    concatenator=DFConnector('tests/lip_wrz2018/total.csv',['tests/lip_wrz2018/Zmieniacz.csv','tests/lip_wrz2018/Musielak.csv','tests/lip_wrz2018/zlecenia.csv','tests/lip_wrz2018/NMR300.csv'])
+    concatenator.merge()
     
 if __name__ == '__main__':              # if we're running file directly and not importing it
     main()
