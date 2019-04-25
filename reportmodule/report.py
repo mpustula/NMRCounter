@@ -59,13 +59,13 @@ class Generator(object):
         self.dir=os.getcwd()
         #print('Working dir: ',self.dir)
         
-        roboto_font=os.path.join(self.dir,"fonts\Roboto\Roboto-Regular.ttf")
+        roboto_font=os.path.join(self.dir,"fonts/Roboto/Roboto-Regular.ttf")
         pdfmetrics.registerFont(TTFont("Roboto Regular",roboto_font))
         
-        roboto_bold=os.path.join(self.dir,"fonts\Roboto\Roboto-Bold.ttf")
+        roboto_bold=os.path.join(self.dir,"fonts/Roboto/Roboto-Bold.ttf")
         pdfmetrics.registerFont(TTFont("Roboto Bold",roboto_bold))
         
-        roboto_cond=os.path.join(self.dir,"fonts\Roboto_Condensed\RobotoCondensed-Regular.ttf")
+        roboto_cond=os.path.join(self.dir,"fonts/Roboto_Condensed/RobotoCondensed-Regular.ttf")
         pdfmetrics.registerFont(TTFont("Roboto Condensed Regular",roboto_cond))
         
         
@@ -127,7 +127,7 @@ class Generator(object):
             user=df.loc[item,'User']
             ftime=self.timeformat(df.loc[item,'STime'])
             exp=df.loc[item,'EXP']
-            ns='%d'%df.loc[item,'NS']
+            ns='%d'%int(df.loc[item,'NS'])
             
             list_item=[sample_name,date,user,ftime,ns,exp]
             
@@ -136,9 +136,12 @@ class Generator(object):
         return full_list
                                    
     def calculate_users(self):
+        print(self.data_df)
         users_list=[]
         for item in self.data_df.index.tolist():
+            print(item)
             user_data=self.data_df.loc[item,'Users']
+            print(user_data)
             for item2 in user_data:
                 item2[2]=self.timeformat(float(item2[3]))
                 del(item2[3])

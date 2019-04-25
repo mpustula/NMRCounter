@@ -26,8 +26,23 @@ class Bill(object):
 
         return self.df.loc[index,:]
 
-    def filter(self,payer=None, zlec=None, cr_from=None, cr_to=None, ex_from=None, ex_to=None):
+    def archive(self,index):
+        self.df.loc[index, 'Status'] = 'Archiwalne'
+        self.save()
+
+    def set_status(self,text):
+        self.df.loc[index, 'Status'] = text
+        self.save()
+
+    def filter(self,payer=None, zlec=None, cr_from=None, cr_to=None, ex_from=None, ex_to=None, arch=False,
+               obciazenia=True, uznania=True):
         rdf=self.df
+        if not arch:
+            rdf = rdf[rdf['Status'] != 'Archiwalne']
+        if not obciazenia:
+            rdf = rdf[rdf['Type'] != 'Obciazenie']
+        if not uznania:
+            rdf = rdf[rdf['Type'] != 'Uznanie']
         if payer:
             rdf=rdf[rdf['Payer'] == payer]
         if zlec:
@@ -45,16 +60,16 @@ class Bill(object):
     def format_date(self,date):
         return datetime.datetime.strftime(date, '%Y-%m-%d')
 
-    def change(self, index, type, zlec, payer, price, hours, expt, date_from, date_to, uwagi):
-        self.insert(index, 'edit', type, zlec, payer, price, hours, expt, date_from, date_to, uwagi)
+    def change(self, index, type, zlec, payer, price, hours, expt, date_from, date_to, uwagi,report,status):
+        self.insert(index, 'edit', type, zlec, payer, price, hours, expt, date_from, date_to, uwagi,report,status)
 
-    def new(self, type, zlec, payer, price, hours, expt, date_from, date_to, uwagi):
+    def new(self, type, zlec, payer, price, hours, expt, date_from, date_to, uwagi,report,status):
         max_id=max(self.df.index.tolist() or [0])
         new_id=max_id+1
 
-        self.insert(new_id, 'new', type, zlec, payer, price, hours, expt, date_from, date_to, uwagi)
+        self.insert(new_id, 'new', type, zlec, payer, price, hours, expt, date_from, date_to, uwagi,report,status)
 
-    def insert(self, new_id, date, type, zlec, payer, price, hours, expt, date_from, date_to, uwagi):
+    def insert(self, new_id, date, type, zlec, payer, price, hours, expt, date_from, date_to, uwagi,report,status):
         if date=='new':
             self.df.loc[new_id,'Date']=self.format_date(datetime.datetime.now())
         self.df.loc[new_id,'Type']=type
@@ -66,9 +81,10 @@ class Bill(object):
         self.df.loc[new_id, 'From'] = self.format_date(date_from)
         self.df.loc[new_id, 'To'] = self.format_date(date_to)
         self.df.loc[new_id, 'Uwagi'] = uwagi
+        self.df.loc[new_id, 'Raport'] = report
+        self.df.loc[new_id, 'Status'] = status
 
         self.save()
-
 
 
 def main():
