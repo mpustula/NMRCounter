@@ -23,7 +23,7 @@
     <item>
      <widget class="QStackedWidget" name="stackedWidget">
       <property name="currentIndex">
-       <number>4</number>
+       <number>2</number>
       </property>
       <widget class="QWidget" name="page">
        <layout class="QVBoxLayout" name="verticalLayout_2">
@@ -37,8 +37,8 @@
             <rect>
              <x>0</x>
              <y>0</y>
-             <width>618</width>
-             <height>293</height>
+             <width>1322</width>
+             <height>773</height>
             </rect>
            </property>
            <layout class="QVBoxLayout" name="verticalLayout_3">
@@ -253,7 +253,7 @@
                 <item>
                  <widget class="QPushButton" name="pushButton">
                   <property name="text">
-                   <string>Wyświetl podsumowanie</string>
+                   <string>Wygeneruj podsumowanie</string>
                   </property>
                  </widget>
                 </item>
@@ -737,7 +737,7 @@
           <item row="2" column="2">
            <widget class="QLabel" name="label_10">
             <property name="text">
-             <string>Beetween dates:</string>
+             <string>Between dates:</string>
             </property>
            </widget>
           </item>
@@ -1745,23 +1745,13 @@
    </property>
    <widget class="QMenu" name="menuPlik">
     <property name="title">
-     <string>Fi&amp;le</string>
+     <string>&amp;Main</string>
     </property>
-    <widget class="QMenu" name="menuEksportuj">
-     <property name="title">
-      <string>&amp;Export</string>
-     </property>
-     <addaction name="actionDo_CSV"/>
-     <addaction name="actionDo_XLS"/>
-    </widget>
     <addaction name="actionSend_mail"/>
     <addaction name="actionPayments"/>
     <addaction name="actionBills"/>
     <addaction name="actionLogs"/>
     <addaction name="separator"/>
-    <addaction name="menuEksportuj"/>
-    <addaction name="actionImportuj"/>
-    <addaction name="actionOpen_log"/>
    </widget>
    <widget class="QMenu" name="menuOpcje">
     <property name="title">
@@ -1778,7 +1768,61 @@
     <addaction name="actionLogin"/>
     <addaction name="actionClose_connection"/>
    </widget>
+   <widget class="QMenu" name="menuPayments">
+    <property name="title">
+     <string>Payments</string>
+    </property>
+    <widget class="QMenu" name="menuExportuj">
+     <property name="title">
+      <string>Export</string>
+     </property>
+     <addaction name="actionTo_CSV"/>
+     <addaction name="actionTo_XLS"/>
+    </widget>
+    <addaction name="actionImportuj_2"/>
+    <addaction name="menuExportuj"/>
+    <addaction name="separator"/>
+    <addaction name="actionOpen_directory"/>
+    <addaction name="actionCount_spectra"/>
+    <addaction name="actionRead_spectra"/>
+    <addaction name="actionMatch_users"/>
+    <addaction name="actionDelete_rows"/>
+    <addaction name="separator"/>
+    <addaction name="actionCreate_summary"/>
+    <addaction name="actionShow_summary"/>
+   </widget>
+   <widget class="QMenu" name="menuBills">
+    <property name="title">
+     <string>Bi&amp;lls</string>
+    </property>
+    <addaction name="actionNew_Bill"/>
+    <addaction name="actionEdit_bill"/>
+    <addaction name="actionDelete"/>
+    <addaction name="actionMark_as_archived"/>
+    <addaction name="actionOpen_corresponding_report"/>
+   </widget>
+   <widget class="QMenu" name="menuMail">
+    <property name="title">
+     <string>Mail</string>
+    </property>
+    <addaction name="actionOpen_directory_2"/>
+    <addaction name="actionMatch_users_2"/>
+    <addaction name="actionDelete_rows_2"/>
+    <addaction name="separator"/>
+    <addaction name="actionSend_all"/>
+    <addaction name="actionSend_selected"/>
+   </widget>
+   <widget class="QMenu" name="menuLogs">
+    <property name="title">
+     <string>Lo&amp;gs</string>
+    </property>
+    <addaction name="actionOpen_log_file"/>
+   </widget>
    <addaction name="menuPlik"/>
+   <addaction name="menuMail"/>
+   <addaction name="menuPayments"/>
+   <addaction name="menuBills"/>
+   <addaction name="menuLogs"/>
    <addaction name="menuServer_connection"/>
    <addaction name="menuOpcje"/>
   </widget>
@@ -1803,7 +1847,7 @@
     <string>&amp;Preferences</string>
    </property>
    <property name="shortcut">
-    <string>F9</string>
+    <string>F10</string>
    </property>
   </action>
   <action name="actionUsers">
@@ -1811,7 +1855,7 @@
     <string>&amp;Users</string>
    </property>
    <property name="shortcut">
-    <string>F5</string>
+    <string>F9</string>
    </property>
   </action>
   <action name="actionConnect">
@@ -1819,7 +1863,7 @@
     <string>&amp;Connect</string>
    </property>
    <property name="shortcut">
-    <string>F1</string>
+    <string>F5</string>
    </property>
   </action>
   <action name="actionLogin">
@@ -1827,7 +1871,7 @@
     <string>&amp;Login</string>
    </property>
    <property name="shortcut">
-    <string>F2</string>
+    <string>F6</string>
    </property>
   </action>
   <action name="actionClose_connection">
@@ -1835,22 +1879,31 @@
     <string>Cl&amp;ose connection</string>
    </property>
    <property name="shortcut">
-    <string>F4</string>
+    <string>F7</string>
    </property>
   </action>
   <action name="actionSend_mail">
    <property name="text">
     <string>&amp;Send mails</string>
    </property>
+   <property name="shortcut">
+    <string>F1</string>
+   </property>
   </action>
   <action name="actionPayments">
    <property name="text">
     <string>&amp;Payments</string>
    </property>
+   <property name="shortcut">
+    <string>F2</string>
+   </property>
   </action>
   <action name="actionLogs">
    <property name="text">
     <string>&amp;Logs</string>
+   </property>
+   <property name="shortcut">
+    <string>F4</string>
    </property>
   </action>
   <action name="actionOpen_log">
@@ -1864,6 +1917,159 @@
   <action name="actionBills">
    <property name="text">
     <string>&amp;Bills</string>
+   </property>
+   <property name="shortcut">
+    <string>F3</string>
+   </property>
+  </action>
+  <action name="actionImportuj_2">
+   <property name="text">
+    <string>Import</string>
+   </property>
+  </action>
+  <action name="actionTo_CSV">
+   <property name="text">
+    <string>to CSV</string>
+   </property>
+  </action>
+  <action name="actionTo_XLS">
+   <property name="text">
+    <string>to XLS</string>
+   </property>
+  </action>
+  <action name="actionShow_summary">
+   <property name="text">
+    <string>Show summary</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+T</string>
+   </property>
+  </action>
+  <action name="actionOpen_directory">
+   <property name="text">
+    <string>Open directory</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+O</string>
+   </property>
+  </action>
+  <action name="actionCount_spectra">
+   <property name="text">
+    <string>Count spectra</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+I</string>
+   </property>
+  </action>
+  <action name="actionRead_spectra">
+   <property name="text">
+    <string>Read spectra</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+R</string>
+   </property>
+  </action>
+  <action name="actionMatch_users">
+   <property name="text">
+    <string>Match users</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+M</string>
+   </property>
+  </action>
+  <action name="actionCreate_summary">
+   <property name="text">
+    <string>Create summary</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+T</string>
+   </property>
+  </action>
+  <action name="actionDelete_rows">
+   <property name="text">
+    <string>Delete rows</string>
+   </property>
+   <property name="shortcut">
+    <string>Del</string>
+   </property>
+  </action>
+  <action name="actionOpen_directory_2">
+   <property name="text">
+    <string>Open directory</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+O</string>
+   </property>
+  </action>
+  <action name="actionMatch_users_2">
+   <property name="text">
+    <string>Match users</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+M</string>
+   </property>
+  </action>
+  <action name="actionDelete_rows_2">
+   <property name="text">
+    <string>Delete rows</string>
+   </property>
+   <property name="shortcut">
+    <string>Del</string>
+   </property>
+  </action>
+  <action name="actionSend_all">
+   <property name="text">
+    <string>Send all</string>
+   </property>
+  </action>
+  <action name="actionSend_selected">
+   <property name="text">
+    <string>Send selected</string>
+   </property>
+  </action>
+  <action name="actionNew_Bill">
+   <property name="text">
+    <string>New bill</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+N</string>
+   </property>
+  </action>
+  <action name="actionEdit_bill">
+   <property name="text">
+    <string>Edit</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+E</string>
+   </property>
+  </action>
+  <action name="actionDelete">
+   <property name="text">
+    <string>Delete</string>
+   </property>
+   <property name="shortcut">
+    <string>Del</string>
+   </property>
+  </action>
+  <action name="actionMark_as_archived">
+   <property name="text">
+    <string>Mark as 'archived'</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+D</string>
+   </property>
+  </action>
+  <action name="actionOpen_corresponding_report">
+   <property name="text">
+    <string>Open corresponding report</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+R</string>
+   </property>
+  </action>
+  <action name="actionOpen_log_file">
+   <property name="text">
+    <string>Open log file</string>
    </property>
   </action>
  </widget>

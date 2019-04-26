@@ -37,6 +37,80 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
     def __init__(self, parent=None):
         super(App, self).__init__(parent)
         self.setupUi(self)
+
+        self.menu_fields = [[self.menuPayments, self.actionImportuj_2, self.menuExportuj, self.actionTo_CSV,
+                             self.actionTo_XLS, self.actionOpen_directory, self.actionCount_spectra,
+                             self.actionRead_spectra, self.actionMatch_users, self.actionDelete_rows,
+                             self.actionCreate_summary, self.actionShow_summary],
+                            [self.menuMail, self.actionOpen_directory_2, self.actionMatch_users_2,
+                             self.actionDelete_rows_2, self.actionSend_all, self.actionSend_selected],
+                            [self.menuLogs, self.actionOpen_log_file], None,
+                            [self.menuBills, self.actionNew_Bill, self.actionEdit_bill, self.actionDelete,
+                             self.actionMark_as_archived, self.actionOpen_corresponding_report]]
+
+        self.set_connections_main()
+        self.set_connections_payments()
+        self.set_connections_mail()
+        self.set_connections_bills()
+        self.set_connections_logs()
+        self.set_connections_options()
+
+        self.disable_menus()
+
+        self.bills = None
+        self.found_files = 1
+        self.sender = None
+        self.start = None
+        self.end = None
+
+        self.stop_button.hide()
+
+        self.set_tables_widths()
+        self.activateTab(1)
+
+        self.current_pixmap = QtGui.QPixmap('icons/if_Circle_Yellow_34215.ico')
+
+        self.status_label = QtWidgets.QLabel()
+        self.statusbar.addWidget(self.status_label)
+
+        curr_date = QtCore.QDate.currentDate()
+        self.dateEdit_2.setDate(curr_date)
+        year = curr_date.year()
+        begin_date = QtCore.QDate(year, 1, 1)
+        self.dateEdit.setDate(begin_date)
+
+        self.buttons_connections = [self.button_connect, self.button_login, self.button_logout]
+        self.buttons_sending = [self.pushButton_2, self.pushButton_3, self.pushButton_5, self.pushButton_6]
+
+        for item in [self.button_logout, self.button_login, self.pushButton_5,
+                     self.pushButton_6, self.pushButton_4, self.actionLogin, self.actionClose_connection]:
+            item.setEnabled(False)
+
+        try:
+            with open('data/params.txt', 'r') as input:
+                self.params = json.load(input)
+        except:
+            self.params = {'server': '', 'port': 0, 'username': '', 'password': '', 'mail_from': '',
+                           'mail_ans': '', 'mail_topic': '', 'mail_text': '', 'timeout': 30,
+                           'main_dir': '', 'zip_dir': '', 'log_dir': '', 'price': '', 'spectra_dir': '',
+                           'report_dir': '','notification_mails':''}
+
+        self.set_params()
+        self.label_user.setText('')
+
+        self.Combo_Zlec.addItems(['Zmieniacz', 'Zlecenia indywidualne', 'Spektrometr 300 MHz'])
+        self.Combo_Zlec.setCurrentIndex(-1)
+
+
+
+    def set_connections_main(self):
+        self.actionPayments.triggered.connect(lambda: self.activateTab(0))
+        self.actionSend_mail.triggered.connect(lambda: self.activateTab(1))
+        self.actionLogs.triggered.connect(lambda: self.activateTab(2))
+        self.pushButton_8.clicked.connect(lambda: self.activateTab(0))
+        self.actionBills.triggered.connect(self.activate_bills)
+
+    def set_connections_payments(self):
         self.chooseDir.clicked.connect(self.choose_dir)
         self.analyze_button.clicked.connect(self.analyze_files)
         self.find_button.clicked.connect(self.count_files)
@@ -45,31 +119,20 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         self.del_button.clicked.connect(self.clear_table)
         self.pushButton.clicked.connect(self.group_df)
 
-        self.actionPayments.triggered.connect(lambda: self.activateTab(0))
-        self.actionSend_mail.triggered.connect(lambda: self.activateTab(1))
-        self.actionLogs.triggered.connect(lambda: self.activateTab(2))
+        self.actionTo_CSV.triggered.connect(self.export_csv)
+        self.actionTo_XLS.triggered.connect(self.export_xls)
+        self.actionImportuj_2.triggered.connect(self.import_csv)
 
-        self.bills = None
-        self.actionBills.triggered.connect(self.activate_bills)
+        self.actionOpen_directory.triggered.connect(self.choose_dir)
+        self.actionDelete_rows.triggered.connect(self.clear_table)
 
-        self.pushButton_8.clicked.connect(lambda: self.activateTab(0))
+        self.raport_button.clicked.connect(self.create_report)
+        self.zaksieguj.clicked.connect(self.save_bills)
 
-        self.actionDo_CSV.triggered.connect(self.export_csv)
-        self.actionDo_XLS.triggered.connect(self.export_xls)
-        self.actionImportuj.triggered.connect(self.import_csv)
-
+    def set_connections_mail(self):
         self.actionConnect.triggered.connect(self.connect_server)
         self.actionLogin.triggered.connect(self.login_server)
         self.actionClose_connection.triggered.connect(self.close_connection)
-
-        self.actionUsers.triggered.connect(self.edit_users)
-
-        self.actionPreferences.triggered.connect(self.show_options)
-        self.found_files = 1
-
-        self.sender = None
-        self.start = None
-        self.end = None
 
         self.pushButton_2.clicked.connect(self.choose_spectra)
         self.pushButton_3.clicked.connect(self.match_user)
@@ -81,9 +144,9 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         self.pushButton_6.clicked.connect(self.send_selected)
         self.pushButton_4.clicked.connect(self.deleteRows)
 
-        self.choose_log.clicked.connect(self.get_open_log)
-        self.read_log.clicked.connect(self.read_log_file)
+        self.tableWidget_2.itemSelectionChanged.connect(self.tabSelChange)
 
+    def set_connections_bills(self):
         self.new_bill.clicked.connect(self.add_new_bill)
         self.delete_bill.clicked.connect(self.del_bill)
         self.edit_bill.clicked.connect(self.edit_existing_bill)
@@ -91,15 +154,51 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         self.filter_bills.clicked.connect(self.filterbills)
         self.send_bill_msg.clicked.connect(self.send_bill_mail)
 
-        self.stop_button.hide()
-        self.activateTab(1)
-
-        self.tableWidget_2.itemSelectionChanged.connect(self.tabSelChange)
+        self.actionNew_Bill.triggered.connect(self.add_new_bill)
+        self.actionDelete.triggered.connect(self.del_bill)
 
         self.tableWidget_4.itemSelectionChanged.connect(self.billtabSelChange)
         self.platnik_send.currentIndexChanged.connect(self.comboSelChange)
         self.tableWidget_4.cellDoubleClicked.connect(self.edit_existing_bill)
 
+    def set_connections_logs(self):
+        self.choose_log.clicked.connect(self.get_open_log)
+        self.read_log.clicked.connect(self.read_log_file)
+
+    def set_connections_options(self):
+        self.actionUsers.triggered.connect(self.edit_users)
+        self.actionPreferences.triggered.connect(self.show_options)
+
+    def activateTab(self, num):
+        self.stackedWidget.setCurrentIndex(num)
+        self.disable_menus()
+        for item in self.menu_fields[num]:
+            item.setEnabled(True)
+
+    def disable_menus(self):
+        # self.menuPayments.setEnabled(False)
+        # self.menuMail.setEnabled(False)
+        # self.menuBills.setEnabled(False)
+        # self.menuLogs.setEnabled(False)
+
+        for item in self.menu_fields:
+            if item:
+                for jtem in item:
+                    jtem.setEnabled(False)
+
+    def closeEvent(self, evnt):
+        evnt.ignore()
+        self.quit_app()
+
+    def quit_app(self):
+
+        msg = 'Do you want to quit program? This will terminate all active processes.'
+        ans = QtWidgets.QMessageBox.question(self, 'Quit', msg,
+                                             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+        if ans == QtWidgets.QMessageBox.Yes:
+            sys.exit()
+
+    def set_tables_widths(self):
         self.tableWidget.setColumnWidth(0, 600)
         self.tableWidget.setColumnWidth(1, 200)
         self.tableWidget.setColumnWidth(2, 150)
@@ -147,58 +246,6 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         self.treeWidget.setColumnWidth(2, 250)
         self.treeWidget.setColumnWidth(3, 200)
         self.treeWidget.setColumnWidth(4, 150)
-
-        self.current_pixmap = QtGui.QPixmap('icons/if_Circle_Yellow_34215.ico')
-
-        self.status_label = QtWidgets.QLabel()
-        self.statusbar.addWidget(self.status_label)
-
-        curr_date = QtCore.QDate.currentDate()
-        self.dateEdit_2.setDate(curr_date)
-        year = curr_date.year()
-        begin_date = QtCore.QDate(year, 1, 1)
-        self.dateEdit.setDate(begin_date)
-
-        self.buttons_connections = [self.button_connect, self.button_login, self.button_logout]
-        self.buttons_sending = [self.pushButton_2, self.pushButton_3, self.pushButton_5, self.pushButton_6]
-
-        for item in [self.button_logout, self.button_login, self.pushButton_5,
-                     self.pushButton_6, self.pushButton_4, self.actionLogin, self.actionClose_connection]:
-            item.setEnabled(False)
-
-        try:
-            with open('data/params.txt', 'r') as input:
-                self.params = json.load(input)
-        except:
-            self.params = {'server': '', 'port': 0, 'username': '', 'password': '', 'mail_from': '',
-                           'mail_ans': '', 'mail_topic': '', 'mail_text': '', 'timeout': 30,
-                           'main_dir': '', 'zip_dir': '', 'log_dir': '', 'price': '', 'spectra_dir': '',
-                           'report_dir': '','notification_mails':''}
-
-        self.set_params()
-        self.label_user.setText('')
-
-        self.raport_button.clicked.connect(self.create_report)
-
-        self.Combo_Zlec.addItems(['Zmieniacz', 'Zlecenia indywidualne', 'Spektrometr 300 MHz'])
-        self.Combo_Zlec.setCurrentIndex(-1)
-
-        self.zaksieguj.clicked.connect(self.save_bills)
-
-    def activateTab(self, num):
-        self.stackedWidget.setCurrentIndex(num)
-
-    def closeEvent(self, evnt):
-        evnt.ignore()
-        self.quit_app()
-
-    def quit_app(self):
-
-        msg = 'Do you want to quit program? This will terminate all active processes.'
-        ans = QtWidgets.QMessageBox.question(self, 'Quit', msg,
-                                             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
-        if ans == QtWidgets.QMessageBox.Yes:
-            sys.exit()
 
     def show_options(self):
         options = OptionsDialog(self)
@@ -2349,6 +2396,20 @@ sys.excepthook = excepthookA
 def main():
     app = QtWidgets.QApplication(sys.argv)
 
+    # Create and display the splash screen
+    splash_pix = QtGui.QPixmap('icons/pdf.png')
+    splash = QtWidgets.QSplashScreen(splash_pix, QtCore.Qt.WindowStaysOnTopHint)
+    splash.setMask(splash_pix.mask())
+    splash.show()
+
+    # create elapse timer to cal time
+    timer = QtCore.QElapsedTimer()
+    timer.start()
+    # we give 3 secs
+    while timer.elapsed() < 3000:
+        app.processEvents()
+    #app.processEvents()
+
     # qt_translator = QtCore.QTranslator()
     # qt_translator.load("qt_pl",QtCore.QLibraryInfo.location(QtCore.QLibraryInfo.TranslationsPath))
     # app.installTranslator(qt_translator)
@@ -2357,6 +2418,7 @@ def main():
 
     form = App()
     form.show()
+    splash.finish(form)
     app.exec_()
 
 
