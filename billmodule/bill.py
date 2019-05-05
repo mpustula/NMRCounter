@@ -12,7 +12,11 @@ import os
 
 class Bill(object):
     def __init__(self):
-        self.df=pd.read_csv('data/bills.csv', sep=',', index_col=0)
+        try:
+            self.df=pd.read_csv('data/bills.csv', sep=',', index_col=0)
+        except FileNotFoundError:
+            self.df=pd.DataFrame(columns=['Date','Type','Zlecenie','Payer','Price','Hours','Experiments', 'From',
+                                          'To', 'Uwagi', 'Raport', 'Status'])
         self.df.fillna('',inplace=True)
 
     def save(self):

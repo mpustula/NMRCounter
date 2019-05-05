@@ -264,7 +264,7 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             options.zip_dir.setText(self.params['zip_dir'])
             options.log_dir.setText(self.params['log_dir'])
 
-            options.price.setValue(self.params['price'])
+            options.price.setValue(float(self.params['price'] or 0))
             options.spectra_dir.setText(self.params['spectra_dir'])
             options.report_dir.setText(self.params['report_dir'])
             options.notification_emails.setText(self.params['notification_mails'].replace(';', '\n'))
@@ -322,7 +322,7 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         self.label_ans.setText(self.params['mail_ans'])
         self.label_topic.setText(self.params['mail_topic'])
         self.label_text.setText(self.params['mail_text'])
-        self.doubleSpinBox.setValue(self.params['price'])
+        self.doubleSpinBox.setValue(float(self.params['price'] or 0))
 
     ####wysylanie###
 
@@ -2390,7 +2390,7 @@ def excepthookA(excType, excValue, tracebackobj):
     errorbox.exec_()
 
 
-sys.excepthook = excepthookA
+#sys.excepthook = excepthookA
 
 
 def main():
