@@ -23,7 +23,7 @@
     <item>
      <widget class="QStackedWidget" name="stackedWidget">
       <property name="currentIndex">
-       <number>2</number>
+       <number>4</number>
       </property>
       <widget class="QWidget" name="page">
        <layout class="QVBoxLayout" name="verticalLayout_2">
@@ -1743,6 +1743,12 @@
      <height>33</height>
     </rect>
    </property>
+   <property name="focusPolicy">
+    <enum>Qt::TabFocus</enum>
+   </property>
+   <property name="nativeMenuBar">
+    <bool>true</bool>
+   </property>
    <widget class="QMenu" name="menuPlik">
     <property name="title">
      <string>&amp;Main</string>
@@ -1774,7 +1780,7 @@
     </property>
     <widget class="QMenu" name="menuExportuj">
      <property name="title">
-      <string>Export</string>
+      <string>&amp;Export</string>
      </property>
      <addaction name="actionTo_CSV"/>
      <addaction name="actionTo_XLS"/>
@@ -1924,22 +1930,22 @@
   </action>
   <action name="actionImportuj_2">
    <property name="text">
-    <string>Import</string>
+    <string>&amp;Import</string>
    </property>
   </action>
   <action name="actionTo_CSV">
    <property name="text">
-    <string>to CSV</string>
+    <string>&amp;to CSV</string>
    </property>
   </action>
   <action name="actionTo_XLS">
    <property name="text">
-    <string>to XLS</string>
+    <string>to &amp;XLS</string>
    </property>
   </action>
   <action name="actionShow_summary">
    <property name="text">
-    <string>Show summary</string>
+    <string>&amp;Show summary</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+T</string>
@@ -1947,7 +1953,7 @@
   </action>
   <action name="actionOpen_directory">
    <property name="text">
-    <string>Open directory</string>
+    <string>&amp;Open directory</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+O</string>
@@ -1955,7 +1961,7 @@
   </action>
   <action name="actionCount_spectra">
    <property name="text">
-    <string>Count spectra</string>
+    <string>&amp;Count spectra</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+I</string>
@@ -1963,7 +1969,7 @@
   </action>
   <action name="actionRead_spectra">
    <property name="text">
-    <string>Read spectra</string>
+    <string>&amp;Read spectra</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+R</string>
@@ -1971,7 +1977,7 @@
   </action>
   <action name="actionMatch_users">
    <property name="text">
-    <string>Match users</string>
+    <string>&amp;Match users</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+M</string>
@@ -1979,7 +1985,7 @@
   </action>
   <action name="actionCreate_summary">
    <property name="text">
-    <string>Create summary</string>
+    <string>Create s&amp;ummary</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+Shift+T</string>
@@ -1987,7 +1993,7 @@
   </action>
   <action name="actionDelete_rows">
    <property name="text">
-    <string>Delete rows</string>
+    <string>&amp;Delete rows</string>
    </property>
    <property name="shortcut">
     <string>Del</string>
@@ -1995,7 +2001,7 @@
   </action>
   <action name="actionOpen_directory_2">
    <property name="text">
-    <string>Open directory</string>
+    <string>&amp;Open directory</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+O</string>
@@ -2003,7 +2009,7 @@
   </action>
   <action name="actionMatch_users_2">
    <property name="text">
-    <string>Match users</string>
+    <string>&amp;Match users</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+M</string>
@@ -2011,7 +2017,7 @@
   </action>
   <action name="actionDelete_rows_2">
    <property name="text">
-    <string>Delete rows</string>
+    <string>&amp;Delete rows</string>
    </property>
    <property name="shortcut">
     <string>Del</string>
@@ -2019,17 +2025,17 @@
   </action>
   <action name="actionSend_all">
    <property name="text">
-    <string>Send all</string>
+    <string>&amp;Send all</string>
    </property>
   </action>
   <action name="actionSend_selected">
    <property name="text">
-    <string>Send selected</string>
+    <string>S&amp;end selected</string>
    </property>
   </action>
   <action name="actionNew_Bill">
    <property name="text">
-    <string>New bill</string>
+    <string>&amp;New bill</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+N</string>
@@ -2037,7 +2043,7 @@
   </action>
   <action name="actionEdit_bill">
    <property name="text">
-    <string>Edit</string>
+    <string>&amp;Edit</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+E</string>
@@ -2045,7 +2051,7 @@
   </action>
   <action name="actionDelete">
    <property name="text">
-    <string>Delete</string>
+    <string>&amp;Delete</string>
    </property>
    <property name="shortcut">
     <string>Del</string>
@@ -2053,7 +2059,7 @@
   </action>
   <action name="actionMark_as_archived">
    <property name="text">
-    <string>Mark as 'archived'</string>
+    <string>&amp;Mark as 'archived'</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+D</string>
@@ -2061,7 +2067,7 @@
   </action>
   <action name="actionOpen_corresponding_report">
    <property name="text">
-    <string>Open corresponding report</string>
+    <string>&amp;Open corresponding report</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+R</string>
@@ -2069,7 +2075,7 @@
   </action>
   <action name="actionOpen_log_file">
    <property name="text">
-    <string>Open log file</string>
+    <string>&amp;Open log file</string>
    </property>
   </action>
  </widget>

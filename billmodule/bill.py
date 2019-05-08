@@ -8,6 +8,8 @@ Created on 28.11.2018 14:50:10
 import datetime
 import pandas as pd
 import os
+import sys
+import subprocess
 
 
 class Bill(object):
@@ -33,6 +35,17 @@ class Bill(object):
     def archive(self,index):
         self.df.loc[index, 'Status'] = 'Archiwalne'
         self.save()
+
+    def open_report(self, index):
+        report_file = self.df.loc[index, 'Raport']
+        if not report_file:
+            raise FileNotFoundError('No file is linked to this bill.')
+        if not os.path.isfile(report_file):
+            raise FileNotFoundError('File cannot be opened. Check if the file really exists.')
+        if sys.platform.startswith('linux'):
+            subprocess.call(["xdg-open", report_file])
+        else:
+            os.startfile(report_file)
 
     def set_status(self,text):
         self.df.loc[index, 'Status'] = text

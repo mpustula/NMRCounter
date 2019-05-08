@@ -4,28 +4,34 @@ Created on Thu Mar  1 17:04:57 2018
 
 @author: marcin
 """
-import sys
-import os
-import time, datetime
-import dateutil.parser as dparser
-import re
-from pandas import read_csv, DataFrame
+import datetime
 import json
-import unidecode
-
-from PyQt5 import QtCore, QtGui, QtWidgets
+import os
+import re
+import sys
+import time
 from subprocess import call
 
-import mainwindow, edit_users, summary, message_box, login, options, new_bill, report_mail
+import dateutil.parser as dparser
+import unidecode
+from PyQt5 import QtCore, QtGui, QtWidgets
+from pandas import read_csv, DataFrame
 
-from mailmodule import mail
-from logmodule import log
-from reportmodule import report
+import edit_users
+import login
+import mainwindow
+import message_box
+import new_bill
+import options
+import report_mail
+import summary
 from billmodule import bill
-from typing import Any
+from logmodule import log
+from mailmodule import mail
+from reportmodule import report
 
 try:
-    user_df = read_csv('users.csv', sep=';', index_col='ID',encoding='utf8')
+    user_df = read_csv('users.csv', sep=';', index_col='ID', encoding='utf8')
 except:
     user_df = DataFrame(columns=['User', 'PayID', 'Patterns', 'Mail'])
 
@@ -44,7 +50,7 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
                              self.actionCreate_summary, self.actionShow_summary],
                             [self.menuMail, self.actionOpen_directory_2, self.actionMatch_users_2,
                              self.actionDelete_rows_2, self.actionSend_all, self.actionSend_selected],
-                            [self.menuLogs, self.actionOpen_log_file], None,
+                            [self.menuLogs, self.actionOpen_log_file], [],
                             [self.menuBills, self.actionNew_Bill, self.actionEdit_bill, self.actionDelete,
                              self.actionMark_as_archived, self.actionOpen_corresponding_report]]
 
@@ -56,6 +62,10 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         self.set_connections_options()
 
         self.disable_menus()
+        self.billtabSelChange()
+        self.comboSelChange()
+        self.tabSelChange()
+        self.mainTabSelChange()
 
         self.bills = None
         self.found_files = 1
@@ -80,7 +90,8 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         self.dateEdit.setDate(begin_date)
 
         self.buttons_connections = [self.button_connect, self.button_login, self.button_logout]
-        self.buttons_sending = [self.pushButton_2, self.pushButton_3, self.pushButton_5, self.pushButton_6]
+        self.buttons_sending = [self.pushButton_2, self.pushButton_3, self.pushButton_5, self.pushButton_6,
+                                self.actionSend_selected, self.actionSend_all]
 
         for item in [self.button_logout, self.button_login, self.pushButton_5,
                      self.pushButton_6, self.pushButton_4, self.actionLogin, self.actionClose_connection]:
@@ -89,19 +100,17 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         try:
             with open('data/params.txt', 'r') as input:
                 self.params = json.load(input)
-        except:
+        except FileNotFoundError:
             self.params = {'server': '', 'port': 0, 'username': '', 'password': '', 'mail_from': '',
                            'mail_ans': '', 'mail_topic': '', 'mail_text': '', 'timeout': 30,
                            'main_dir': '', 'zip_dir': '', 'log_dir': '', 'price': '', 'spectra_dir': '',
-                           'report_dir': '','notification_mails':''}
+                           'report_dir': '', 'notification_mails': ''}
 
         self.set_params()
         self.label_user.setText('')
 
         self.Combo_Zlec.addItems(['Zmieniacz', 'Zlecenia indywidualne', 'Spektrometr 300 MHz'])
         self.Combo_Zlec.setCurrentIndex(-1)
-
-
 
     def set_connections_main(self):
         self.actionPayments.triggered.connect(lambda: self.activateTab(0))
@@ -124,7 +133,12 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         self.actionImportuj_2.triggered.connect(self.import_csv)
 
         self.actionOpen_directory.triggered.connect(self.choose_dir)
+        self.actionCount_spectra.triggered.connect(self.count_files)
+        self.actionRead_spectra.triggered.connect(self.analyze_files)
+        self.actionMatch_users.triggered.connect(self.analyze_users)
         self.actionDelete_rows.triggered.connect(self.clear_table)
+        self.actionCreate_summary.triggered.connect(self.group_df)
+        self.actionShow_summary.triggered.connect(lambda: self.activateTab(3))
 
         self.raport_button.clicked.connect(self.create_report)
         self.zaksieguj.clicked.connect(self.save_bills)
@@ -133,16 +147,21 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         self.actionConnect.triggered.connect(self.connect_server)
         self.actionLogin.triggered.connect(self.login_server)
         self.actionClose_connection.triggered.connect(self.close_connection)
-
-        self.pushButton_2.clicked.connect(self.choose_spectra)
-        self.pushButton_3.clicked.connect(self.match_user)
         self.button_connect.clicked.connect(self.connect_server)
         self.button_login.clicked.connect(self.login_server)
         self.button_logout.clicked.connect(self.close_connection)
 
+        self.pushButton_2.clicked.connect(self.choose_spectra)
+        self.pushButton_3.clicked.connect(self.match_user)
+        self.actionOpen_directory_2.triggered.connect(self.choose_spectra)
+        self.actionMatch_users_2.triggered.connect(self.match_user)
+
         self.pushButton_5.clicked.connect(self.send_all)
         self.pushButton_6.clicked.connect(self.send_selected)
         self.pushButton_4.clicked.connect(self.deleteRows)
+        self.actionSend_all.triggered.connect(self.send_all)
+        self.actionSend_selected.triggered.connect(self.send_selected)
+        self.actionDelete_rows_2.triggered.connect(self.deleteRows)
 
         self.tableWidget_2.itemSelectionChanged.connect(self.tabSelChange)
 
@@ -150,20 +169,25 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         self.new_bill.clicked.connect(self.add_new_bill)
         self.delete_bill.clicked.connect(self.del_bill)
         self.edit_bill.clicked.connect(self.edit_existing_bill)
+        self.tableWidget_4.cellDoubleClicked.connect(self.edit_existing_bill)
         self.archive_button.clicked.connect(self.archive_bill)
+
         self.filter_bills.clicked.connect(self.filterbills)
         self.send_bill_msg.clicked.connect(self.send_bill_mail)
 
         self.actionNew_Bill.triggered.connect(self.add_new_bill)
+        self.actionEdit_bill.triggered.connect(self.edit_existing_bill)
         self.actionDelete.triggered.connect(self.del_bill)
+        self.actionMark_as_archived.triggered.connect(self.archive_bill)
+        self.actionOpen_corresponding_report.triggered.connect(self.open_bill_report)
 
         self.tableWidget_4.itemSelectionChanged.connect(self.billtabSelChange)
         self.platnik_send.currentIndexChanged.connect(self.comboSelChange)
-        self.tableWidget_4.cellDoubleClicked.connect(self.edit_existing_bill)
 
     def set_connections_logs(self):
         self.choose_log.clicked.connect(self.get_open_log)
         self.read_log.clicked.connect(self.read_log_file)
+        self.actionOpen_log_file.triggered.connect(self.get_open_log)
 
     def set_connections_options(self):
         self.actionUsers.triggered.connect(self.edit_users)
@@ -176,22 +200,27 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             item.setEnabled(True)
 
     def disable_menus(self):
-        # self.menuPayments.setEnabled(False)
-        # self.menuMail.setEnabled(False)
-        # self.menuBills.setEnabled(False)
-        # self.menuLogs.setEnabled(False)
-
         for item in self.menu_fields:
             if item:
                 for jtem in item:
                     jtem.setEnabled(False)
+
+    def show_error_msg(self, error, title, type):
+        icons = {'Critical': QtWidgets.QMessageBox.Critical, 'Information': QtWidgets.QMessageBox.Information,
+                 'Warning': QtWidgets.QMessageBox.Warning}
+        error_dialog = QtWidgets.QMessageBox(self)
+        error_dialog.setWindowTitle("An error occured!")
+        error_dialog.setText(title)
+        error_dialog.setInformativeText(str(error))
+        error_dialog.setIcon(icons[type])
+
+        error_dialog.show()
 
     def closeEvent(self, evnt):
         evnt.ignore()
         self.quit_app()
 
     def quit_app(self):
-
         msg = 'Do you want to quit program? This will terminate all active processes.'
         ans = QtWidgets.QMessageBox.question(self, 'Quit', msg,
                                              QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
@@ -276,7 +305,6 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             options.saldo.setText(self.params['saldo'])
             options.brak_naleznosci.setText(self.params['brak_naleznosci'])
 
-
         options.show()
 
         if options.exec_():
@@ -297,7 +325,7 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             self.params['price'] = options.price.value()
             self.params['spectra_dir'] = options.spectra_dir.text()
             self.params['report_dir'] = options.report_dir.text()
-            self.params['notification_mails']=options.notification_emails.toPlainText().replace('\n', ';')
+            self.params['notification_mails'] = options.notification_emails.toPlainText().replace('\n', ';')
 
             with open('data/bill_mail.txt', 'w', encoding='utf-8') as mail_template:
                 mail_template.write(options.notification_text.toPlainText())
@@ -489,8 +517,10 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         selected_rows = self.tableWidget_2.selectedIndexes()
         if selected_rows:
             self.pushButton_4.setEnabled(True)
+            self.actionDelete_rows_2.setEnabled(True)
         else:
             self.pushButton_4.setEnabled(False)
+            self.actionDelete_rows_2.setEnabled(False)
 
     def deleteRows(self):
         selected_rows = self.tableWidget_2.selectedIndexes()
@@ -808,8 +838,10 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         selected_rows = self.tableWidget.selectedIndexes()
         if selected_rows:
             self.del_button.setEnabled(True)
+            self.actionDelete_rows.setEnabled(True)
         else:
             self.del_button.setEnabled(False)
+            self.actionDelete_rows.setEnabled(True)
 
     def clear_table(self):
         msg = 'Czy na pewno chcesz usunąć wybrane wiersze?'
@@ -979,27 +1011,23 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
     def save_bills(self):
         bills = bill.Bill()
 
-
-        zlec=self.Combo_Zlec.currentText()
+        zlec = self.Combo_Zlec.currentText()
         start = self.dateEdit_3.date().toPyDate()
         end = self.dateEdit_4.date().toPyDate()
 
-        report_path=self.raport_path.text()
-
+        report_path = self.raport_path.text()
 
         for item in self.summ_df.index.tolist():
-            if item!='__undefined__':
-                lexp=self.summ_df.loc[item,'Count']
-                hours='%.2f'%(float(self.summ_df.loc[item,'Times'])/3600)
-                cost='%.2f'%(-1*float(self.summ_df.loc[item,'Cost']))
+            if item != '__undefined__':
+                lexp = self.summ_df.loc[item, 'Count']
+                hours = '%.2f' % (float(self.summ_df.loc[item, 'Times']) / 3600)
+                cost = '%.2f' % (-1 * float(self.summ_df.loc[item, 'Cost']))
                 partial_name = report_path.split('.')[0].replace(' ', '_') + '_' + item.replace(', ', '_') + '.pdf'
 
-                bills.new('Obciazenie',zlec,item,cost,hours,lexp,start,end,
-                          'Cena jednostkowa %.2f'%float(self.doubleSpinBox.value()),partial_name,'Nowe')
+                bills.new('Obciazenie', zlec, item, cost, hours, lexp, start, end,
+                          'Cena jednostkowa %.2f' % float(self.doubleSpinBox.value()), partial_name, 'Nowe')
 
         self.activate_bills()
-
-
 
     def group_row(self, status, payer_list):
         price = float(self.doubleSpinBox.value())
@@ -1081,15 +1109,10 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
 
         self.tableWidget_3.setSortingEnabled(True)
 
-
-
-
-##################Platnosci##########################################
+    ##################Platnosci##########################################
 
     def activate_bills(self):
-        self.bills=bill.Bill()
-        self.delete_bill.setEnabled(False)
-        self.edit_bill.setEnabled(False)
+        self.bills = bill.Bill()
 
         curr_date = QtCore.QDate.currentDate()
         self.created_to.setDate(curr_date)
@@ -1110,33 +1133,34 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
 
         self.activateTab(4)
 
-        self.show_bills(self.bills.filter())
+        #self.show_bills(self.bills.filter())
+        self.filterbills()
 
     def filterbills(self):
-        date1=self.created_from.date().toPyDate()
-        date2=self.created_to.date().toPyDate()
+        date1 = self.created_from.date().toPyDate()
+        date2 = self.created_to.date().toPyDate()
 
         date3 = self.exp_from.date().toPyDate()
         date4 = self.expt_to.date().toPyDate()
 
-        payer=self.bill_payer.currentText()
-        zlec_type=self.type_exp.currentText()
+        payer = self.bill_payer.currentText()
+        zlec_type = self.type_exp.currentText()
 
-        arch=self.check_arch.isChecked()
-        obciaz=self.check_obciazenia.isChecked()
-        uznania=self.check_uznania.isChecked()
+        arch = self.check_arch.isChecked()
+        obciaz = self.check_obciazenia.isChecked()
+        uznania = self.check_uznania.isChecked()
 
-        filtered_bills=self.bills.filter(payer, zlec_type, date1, date2, date3, date4, arch, obciaz, uznania)
+        filtered_bills = self.bills.filter(payer, zlec_type, date1, date2, date3, date4, arch, obciaz, uznania)
 
         self.show_bills(filtered_bills)
 
-    def show_bills(self,bill_df):
+    def show_bills(self, bill_df):
         self.tableWidget_3.clearContents()
         self.tableWidget_3.setSortingEnabled(False)
 
         self.tableWidget_4.setRowCount(0)
 
-        #bill_df=self.bills.filter()
+        # bill_df=self.bills.filter()
 
         for i, item in enumerate(bill_df.index.tolist()):
             date = bill_df['Date'][item]
@@ -1149,16 +1173,17 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             date_from = bill_df['From'][item]
             date_to = bill_df['To'][item]
             uwagi = bill_df['Uwagi'][item]
-            report=bill_df['Raport'][item]
-            status=bill_df['Status'][item]
+            report = bill_df['Raport'][item]
+            status = bill_df['Status'][item]
 
-            values_list = ['%d'%item, date, type, zlec, payer, '%.2f'%price, '%.2f'%hours, '%d'%expt, date_from, date_to,
-                           uwagi,report,status]
+            values_list = ['%d' % item, date, type, zlec, payer, '%.2f' % price, '%.2f' % hours, '%d' % expt, date_from,
+                           date_to,
+                           uwagi, report, status]
             self.tableWidget_4.insertRow(i)
             font = QtGui.QFont()
-            if status=='Archiwalne':
+            if status == 'Archiwalne':
                 brush_arch = QtGui.QBrush(QtGui.QColor(160, 160, 160))
-            elif status=="Powiadomienie":
+            elif status == "Powiadomienie":
                 font.setBold(True)
                 brush_arch = QtGui.QBrush(QtGui.QColor(0, 0, 0))
             else:
@@ -1170,40 +1195,38 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
                 table_item = QtWidgets.QTableWidgetItem(item2)
                 table_item.setForeground(brush_arch)
                 table_item.setFont(font)
-                if j==5 and status != 'Archiwalne':
-                    if float(item2)<0:
+                if j == 5 and status != 'Archiwalne':
+                    if float(item2) < 0:
                         brush = QtGui.QBrush(QtGui.QColor(255, 0, 0))
                         brush.setStyle(QtCore.Qt.NoBrush)
                     else:
                         brush = QtGui.QBrush(QtGui.QColor(0, 100, 0))
                         brush.setStyle(QtCore.Qt.NoBrush)
                     table_item.setForeground(brush)
-                if j==5 or j==6 or j==7:
-                    table_item.setTextAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignVCenter)
-                if j==11:
-                    table_item.setTextAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignVCenter|QtCore.Qt.AnchorRight)
+                if j == 5 or j == 6 or j == 7:
+                    table_item.setTextAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+                if j == 11:
+                    table_item.setTextAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter | QtCore.Qt.AnchorRight)
 
                 self.tableWidget_4.setItem(i, j, table_item)
 
+        obc_df = bill_df[bill_df['Price'] < 0]
 
-        obc_df=bill_df[bill_df['Price']<0]
+        opl_df = bill_df[bill_df['Price'] > 0]
 
-        opl_df=bill_df[bill_df['Price']>0]
-
-        self.num_bills.setText('%d'%len(bill_df.index.tolist()))
+        self.num_bills.setText('%d' % len(bill_df.index.tolist()))
         self.num_bills_w.setText('%d' % len(obc_df.index.tolist()))
         self.num_bills_o.setText('%d' % len(opl_df.index.tolist()))
 
-        self.bill_num_exp.setText('%d'%obc_df['Experiments'].sum())
+        self.bill_num_exp.setText('%d' % obc_df['Experiments'].sum())
         self.bill_num_exp_w.setText('%d' % obc_df['Experiments'].sum())
         self.bill_num_exp_o.setText('%d' % opl_df['Experiments'].sum())
 
-
-        self.bill_time_exp.setText('%.2f'%obc_df['Hours'].sum())
+        self.bill_time_exp.setText('%.2f' % obc_df['Hours'].sum())
         self.bill_time_exp_w.setText('%.2f' % obc_df['Hours'].sum())
         self.bill_time_exp_o.setText('%.2f' % opl_df['Hours'].sum())
 
-        self.bill_price.setText('%.2f'%bill_df['Price'].sum())
+        self.bill_price.setText('%.2f' % bill_df['Price'].sum())
         self.bill_price_w.setText('%.2f' % obc_df['Price'].sum())
         self.bill_price_o.setText('%.2f' % opl_df['Price'].sum())
 
@@ -1228,18 +1251,18 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             zlec = unidecode.unidecode(newBillDialog.zlecenie.currentText())
             payer = unidecode.unidecode(newBillDialog.platnik.currentText())
             price = newBillDialog.kwota.value()
-            if type=='Uznanie':
-                price=abs(price)
-            elif type=='Obciazenie':
-                price=-1*abs(price)
+            if type == 'Uznanie':
+                price = abs(price)
+            elif type == 'Obciazenie':
+                price = -1 * abs(price)
             hours = newBillDialog.liczba_godzin.value()
             expt = newBillDialog.liczba_pomiarow.value()
-            date_from=newBillDialog.od.date().toPyDate()
+            date_from = newBillDialog.od.date().toPyDate()
             date_to = newBillDialog.do_2.date().toPyDate()
             uwagi = unidecode.unidecode(newBillDialog.uwagi.text())
             raport = newBillDialog.raport_line.text()
             status = unidecode.unidecode(newBillDialog.status_line.text())
-            self.bills.new(type, zlec, payer, price, hours, expt, date_from, date_to, uwagi,raport,status)
+            self.bills.new(type, zlec, payer, price, hours, expt, date_from, date_to, uwagi, raport, status)
 
             self.filterbills()
 
@@ -1249,7 +1272,7 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         print(current_row)
         if current_row > -1:
             index = self.tableWidget_4.item(current_row, 0).text()
-            values=self.bills.get(int(index))
+            values = self.bills.get(int(index))
             print(values)
             print(values[0])
             print(values[1])
@@ -1258,41 +1281,42 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             newBillDialog = NewBill(self)
             newBillDialog.show()
 
-
-            widgets=[newBillDialog.id, newBillDialog.type, newBillDialog.zlecenie, newBillDialog.platnik,
-                     newBillDialog.kwota, newBillDialog.liczba_godzin, newBillDialog.liczba_pomiarow,
-                     newBillDialog.od, newBillDialog.do_2, newBillDialog.uwagi,newBillDialog.raport_line,newBillDialog.status_line]
+            widgets = [newBillDialog.id, newBillDialog.type, newBillDialog.zlecenie, newBillDialog.platnik,
+                       newBillDialog.kwota, newBillDialog.liczba_godzin, newBillDialog.liczba_pomiarow,
+                       newBillDialog.od, newBillDialog.do_2, newBillDialog.uwagi, newBillDialog.raport_line,
+                       newBillDialog.status_line]
 
             widgets[0].setText(index)
             for i, item in enumerate(widgets):
-                if i==1 or i==2 or i==3:
+                if i == 1 or i == 2 or i == 3:
                     item.setEditText(values[i])
-                elif i==4 or i==5 or i==6:
+                elif i == 4 or i == 5 or i == 6:
                     item.setValue(values[i])
-                elif i==7 or i==8:
+                elif i == 7 or i == 8:
                     item.setDate(datetime.datetime.strptime(values[i], '%Y-%m-%d'))
-                elif i==9 or i==10 or i==11:
+                elif i == 9 or i == 10 or i == 11:
                     item.setText(values[i])
 
             if newBillDialog.exec_():
-                index_ed=int(newBillDialog.id.text())
+                index_ed = int(newBillDialog.id.text())
                 type = unidecode.unidecode(newBillDialog.type.currentText())
                 zlec = unidecode.unidecode(newBillDialog.zlecenie.currentText())
                 payer = unidecode.unidecode(newBillDialog.platnik.currentText())
                 price = newBillDialog.kwota.value()
-                if type=='Uznanie':
-                    price=abs(price)
-                elif type=='Obciazenie':
-                    price=-1*abs(price)
+                if type == 'Uznanie':
+                    price = abs(price)
+                elif type == 'Obciazenie':
+                    price = -1 * abs(price)
                 hours = newBillDialog.liczba_godzin.value()
                 expt = newBillDialog.liczba_pomiarow.value()
-                date_from=newBillDialog.od.date().toPyDate()
+                date_from = newBillDialog.od.date().toPyDate()
                 date_to = newBillDialog.do_2.date().toPyDate()
-                uwagi=unidecode.unidecode(newBillDialog.uwagi.text())
+                uwagi = unidecode.unidecode(newBillDialog.uwagi.text())
                 raport = newBillDialog.raport_line.text()
                 status = unidecode.unidecode(newBillDialog.status_line.text())
 
-                self.bills.change(index_ed,type, zlec, payer, price, hours, expt, date_from, date_to,uwagi,raport,status)
+                self.bills.change(index_ed, type, zlec, payer, price, hours, expt, date_from, date_to, uwagi, raport,
+                                  status)
 
                 self.filterbills()
 
@@ -1309,14 +1333,24 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         if selected_rows:
             self.delete_bill.setEnabled(True)
             self.edit_bill.setEnabled(True)
-            #self.send_bill_msg.setEnabled(True)
+            # self.send_bill_msg.setEnabled(True)
+            self.archive_button.setEnabled(True)
+            self.actionEdit_bill.setEnabled(True)
+            self.actionDelete.setEnabled(True)
+            self.actionMark_as_archived.setEnabled(True)
+            self.actionOpen_corresponding_report.setEnabled(True)
         else:
             self.delete_bill.setEnabled(False)
             self.edit_bill.setEnabled(False)
-            #self.send_bill_msg.setEnabled(False)
+            # self.send_bill_msg.setEnabled(False)
+            self.archive_button.setEnabled(False)
+            self.actionEdit_bill.setEnabled(False)
+            self.actionDelete.setEnabled(False)
+            self.actionMark_as_archived.setEnabled(False)
+            self.actionOpen_corresponding_report.setEnabled(False)
 
     def comboSelChange(self):
-        combo_text=self.platnik_send.currentText()
+        combo_text = self.platnik_send.currentText()
         if combo_text:
             self.send_bill_msg.setEnabled(True)
         else:
@@ -1327,109 +1361,117 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         print(current_row)
         if current_row > -1:
             index = self.tableWidget_4.item(current_row, 0).text()
-            msg = 'Czy na pewno chcesz usunąć rozliczenie nr '+index+'?'
+            msg = 'Czy na pewno chcesz usunąć rozliczenie nr ' + index + '?'
             ans = QtWidgets.QMessageBox.question(self, 'Usuń wpis', msg,
                                                  QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
             if ans == QtWidgets.QMessageBox.Yes:
                 self.bills.delete(int(index))
                 self.filterbills()
 
-    def find_mail(self,user_name):
-        user_match = user_df[user_df['User']==user_name.strip()]
+    def open_bill_report(self):
+        current_row = self.tableWidget_4.currentRow()
+        if current_row > -1:
+            index = self.tableWidget_4.item(current_row, 0).text()
+            try:
+                self.bills.open_report(int(index))
+            except FileNotFoundError as error:
+                self.show_error_msg(error, 'Error during opening of the file', 'Critical')
+
+    def find_mail(self, user_name):
+        user_match = user_df[user_df['User'] == user_name.strip()]
         if not user_match.empty:
-            found_mail=user_match['Mail']
+            found_mail = user_match['Mail']
             return found_mail.iloc[0]
 
-
     def send_bill_mail(self):
-        #selected_rows = self.tableWidget_4.selectedIndexes()
-        #indices = [int(self.tableWidget_4.item(item, 0).text()) for item in list(set([x.row() for x in selected_rows]))]
-        selected_payer=self.platnik_send.currentText()
+        # selected_rows = self.tableWidget_4.selectedIndexes()
+        # indices = [int(self.tableWidget_4.item(item, 0).text()) for item in list(set([x.row() for x in selected_rows]))]
+        selected_payer = self.platnik_send.currentText()
 
-        payer_bills=self.bills.filter(payer=selected_payer,arch=True)
+        payer_bills = self.bills.filter(payer=selected_payer, arch=True)
 
-        old_bills=payer_bills[payer_bills['Status']=='Archiwalne']
+        old_bills = payer_bills[payer_bills['Status'] == 'Archiwalne']
         print(old_bills)
         if not old_bills.empty:
-            old_price=old_bills['Price'].sum()
+            old_price = old_bills['Price'].sum()
         else:
-            old_price=0.0
+            old_price = 0.0
 
-        df=payer_bills[payer_bills['Status']!='Archiwalne']
+        df = payer_bills[payer_bills['Status'] != 'Archiwalne']
 
-        current_df_indices=df.index.tolist()
+        current_df_indices = df.index.tolist()
 
         if old_price:
-            old_price_info='{: 9.2f}'.format(old_price)+'   '+self.params['saldo']
-            #df_to_print.loc['old_bills','Zlecenie']='Saldo z poprzednich okresów rozliczeniowych'
+            old_price_info = '{: 9.2f}'.format(old_price) + '   ' + self.params['saldo']
+            # df_to_print.loc['old_bills','Zlecenie']='Saldo z poprzednich okresów rozliczeniowych'
         else:
-            old_price_info=''
+            old_price_info = ''
 
-        #df=self.bills.get(indices)
+        # df=self.bills.get(indices)
 
         for item in current_df_indices:
-            if float(df.loc[item,'Price'])>0:
-                df.loc[item,'Zlecenie']='Uznanie'
+            if float(df.loc[item, 'Price']) > 0:
+                df.loc[item, 'Zlecenie'] = 'Uznanie'
 
         if not df.empty:
-            table_str=df.to_string(columns=['Price','Zlecenie','From','To', 'Date'],
-                                   header=False,formatters=['{: 9.2f}'.format,None,'za okres od {}'.format,' do {}.'.format,
-                                                            'Zaksięgowano {}'.format],
-                                   index=False,justify='right')
+            table_str = df.to_string(columns=['Price', 'Zlecenie', 'From', 'To', 'Date'],
+                                     header=False,
+                                     formatters=['{: 9.2f}'.format, None, 'za okres od {}'.format, ' do {}.'.format,
+                                                 'Zaksięgowano {}'.format],
+                                     index=False, justify='right')
         else:
-            table_str=self.params['brak_naleznosci']
+            table_str = self.params['brak_naleznosci']
 
         payers = df.Payer.unique()
         if len(payers) == 1:
-            payer_info=payers[0]
+            payer_info = payers[0]
         else:
-            payer_info='Więcej niż jeden!'
+            payer_info = 'Więcej niż jeden!'
 
-
-        total_price=df['Price'].sum()+old_price
-        if total_price>0:
-            nadpl='nadpłata'
-            nadpl_text=self.params['nadplata']
-        elif total_price<0:
-            nadpl='do zapłaty'
-            nadpl_text=self.params['niedoplata']
+        total_price = df['Price'].sum() + old_price
+        if total_price > 0:
+            nadpl = 'nadpłata'
+            nadpl_text = self.params['nadplata']
+        elif total_price < 0:
+            nadpl = 'do zapłaty'
+            nadpl_text = self.params['niedoplata']
         else:
-            nadpl=''
-            nadpl_text=''
+            nadpl = ''
+            nadpl_text = ''
 
-        attachements=df['Raport']
-        #print(attachements)
+        attachements = df['Raport']
+        # print(attachements)
 
-        zal=[df.loc[index,'Raport'] for index in current_df_indices]
+        zal = [df.loc[index, 'Raport'] for index in current_df_indices]
 
-        zal_names=[' - '+os.path.basename(item) for item in zal if item]
+        zal_names = [' - ' + os.path.basename(item) for item in zal if item]
 
         with open('data/bill_mail.txt', 'r', encoding='utf-8') as mail_template:
-            mail_text=mail_template.read()%(self.bills.format_date(datetime.datetime.now()),'; '.join(payers),table_str,
-                                            old_price_info,nadpl,'{: 9.2f} PLN'.format(total_price),nadpl_text,
-                                            '\n'.join(zal_names))
+            mail_text = mail_template.read() % (
+            self.bills.format_date(datetime.datetime.now()), '; '.join(payers), table_str,
+            old_price_info, nadpl, '{: 9.2f} PLN'.format(total_price), nadpl_text,
+            '\n'.join(zal_names))
 
-        mail_bill=MailBill(self)
+        mail_bill = MailBill(self)
         mail_bill.platnik.setText(payer_info)
 
-        default_mails=self.params['notification_mails']
+        default_mails = self.params['notification_mails']
         for item in default_mails.split(';'):
             mail_bill.mail.addItem(item)
 
-
         for item in payers:
-            mail=self.find_mail(item)
+            mail = self.find_mail(item)
             if mail:
                 mail_bill.mail.addItem(mail)
 
         mail_bill.tresc.setText(mail_text)
         mail_bill.temat.setText('Rozliczenie pomiarów NMR')
-        mail_bill.current_df_indices=current_df_indices
+        mail_bill.current_df_indices = current_df_indices
         for report_file in zal:
             if report_file:
                 item = QtWidgets.QListWidgetItem()
                 item.setText(os.path.basename(report_file))
-                item.report_path=report_file
+                item.report_path = report_file
                 icon = QtGui.QIcon()
                 icon.addPixmap(QtGui.QPixmap("icons/pdf.ico"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
                 item.setIcon(icon)
@@ -1458,10 +1500,9 @@ class NewBill(QtWidgets.QDialog, new_bill.Ui_Dialog):
         self.platnik.addItems(user_df['User'])
         self.platnik.setCurrentIndex(-1)
 
-        self.type.addItems(['Uznanie','Obciazenie'])
+        self.type.addItems(['Uznanie', 'Obciazenie'])
         self.zlecenie.addItems(['Zmieniacz', 'Zlecenia indywidualne', 'Spektrometr 300 MHz'])
         self.zlecenie.setCurrentIndex(-1)
-
 
 
 class MailBill(QtWidgets.QDialog, report_mail.Ui_Dialog):
@@ -1470,12 +1511,12 @@ class MailBill(QtWidgets.QDialog, report_mail.Ui_Dialog):
         super(MailBill, self).__init__(parent)
         self.setupUi(self)
         self.listWidget.itemDoubleClicked.connect(self.load_report)
-        self.parent=parent
+        self.parent = parent
         self.pushButton.clicked.connect(self.send)
 
     def load_report(self):
-        item=self.listWidget.currentItem()
-        report_file=item.report_path
+        item = self.listWidget.currentItem()
+        report_file = item.report_path
 
         if sys.platform.startswith('linux'):
             call(["xdg-open", report_file])
@@ -1490,17 +1531,17 @@ class MailBill(QtWidgets.QDialog, report_mail.Ui_Dialog):
         # if self.button_login.isEnabled():
         #    self.login_server()
         ans_mail = self.parent.sender.send([self.mail.currentText()], from_mail, self.temat.text(),
-                                    self.tresc.toPlainText(), files, from_mail)
+                                           self.tresc.toPlainText(), files, from_mail)
         if ans_mail[0]:
             for item in self.current_df_indices:
-                self.parent.bills.set_status(item,'Powiadomienie')
+                self.parent.bills.set_status(item, 'Powiadomienie')
             self.parent.filterbills()
 
-            msg=QtWidgets.QMessageBox.information(self, 'Powiadomienie wysłane', 'Mail został poprawnie wysłany na adres '+self.mail.currentText(),
-                                                 QtWidgets.QMessageBox.Ok)
+            msg = QtWidgets.QMessageBox.information(self, 'Powiadomienie wysłane',
+                                                    'Mail został poprawnie wysłany na adres ' + self.mail.currentText(),
+                                                    QtWidgets.QMessageBox.Ok)
 
             self.destroy()
-
 
 
 class GroupWorker(QtCore.QObject):
@@ -1897,12 +1938,13 @@ class EditUsers(QtWidgets.QDialog, edit_users.Ui_Dialog):
 
     def fill_table(self):
 
-        query=self.find_query.text()
+        query = self.find_query.text()
 
         if query:
-            udf=user_df[(user_df['User'].str.contains('(?i)'+query)) | (user_df['Patterns'].str.contains('(?i)'+query))]
+            udf = user_df[
+                (user_df['User'].str.contains('(?i)' + query)) | (user_df['Patterns'].str.contains('(?i)' + query))]
         else:
-            udf=user_df
+            udf = user_df
 
         self.tableWidget.clearContents()
         self.tableWidget.setRowCount(len(udf))
@@ -1954,7 +1996,7 @@ class EditUsers(QtWidgets.QDialog, edit_users.Ui_Dialog):
         self.lineEdit.setText(user_df.loc[curr_index, 'User'])
         self.lineEdit_3.setText(user_df.loc[curr_index, 'Mail'])
         print(user_df.loc[curr_index, 'Patterns'])
-        self.lineEdit_2.setText(user_df.loc[curr_index, 'Patterns'].replace('\r',''))
+        self.lineEdit_2.setText(user_df.loc[curr_index, 'Patterns'].replace('\r', ''))
         self.comboBox.setEditText(user_df.loc[int(user_df.loc[curr_index, 'PayID']), 'User'])
 
     def delete_user(self):
@@ -1967,7 +2009,7 @@ class EditUsers(QtWidgets.QDialog, edit_users.Ui_Dialog):
         if ans == QtWidgets.QMessageBox.Yes:
             user_df.drop([curr_index], inplace=True)
             user_df.sort_values(by=['User'], inplace=True)
-            user_df.to_csv('users.csv', sep=';', index_label='ID',encoding='utf8')
+            user_df.to_csv('users.csv', sep=';', index_label='ID', encoding='utf8')
 
             self.fill_table()
             self.fill_combo()
@@ -2043,7 +2085,7 @@ class EditUsers(QtWidgets.QDialog, edit_users.Ui_Dialog):
         user_df.loc[index, 'Mail'] = mail
 
         user_df.sort_values(by=['User'], inplace=True)
-        user_df.to_csv('users.csv', sep=';', index_label='ID',encoding='utf8')
+        user_df.to_csv('users.csv', sep=';', index_label='ID', encoding='utf8')
 
         self.fill_table()
         self.fill_combo()
@@ -2390,27 +2432,27 @@ def excepthookA(excType, excValue, tracebackobj):
     errorbox.exec_()
 
 
-#sys.excepthook = excepthookA
+sys.excepthook = excepthookA
 
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
 
-    # Create and display the splash screen
-    splash_pix = QtGui.QPixmap('icons/pdf.png')
-    splash = QtWidgets.QSplashScreen(splash_pix, QtCore.Qt.WindowStaysOnTopHint)
-    splash.setMask(splash_pix.mask())
-    splash.show()
-
-    # create elapse timer to cal time
-    timer = QtCore.QElapsedTimer()
-    timer.start()
-    # we give 3 secs
-    while timer.elapsed() < 3000:
-        app.processEvents()
-    #app.processEvents()
-
-    # qt_translator = QtCore.QTranslator()
+    # # Create and display the splash screen
+    # splash_pix = QtGui.QPixmap('icons/pdf.png')
+    # splash = QtWidgets.QSplashScreen(splash_pix, QtCore.Qt.WindowStaysOnTopHint)
+    # splash.setMask(splash_pix.mask())
+    # splash.show()
+    #
+    # # create elapse timer to cal time
+    # timer = QtCore.QElapsedTimer()
+    # timer.start()
+    # # we give 3 secs
+    # while timer.elapsed() < 3000:
+    #     app.processEvents()
+    # #app.processEvents()
+    #
+    # # qt_translator = QtCore.QTranslator()
     # qt_translator.load("qt_pl",QtCore.QLibraryInfo.location(QtCore.QLibraryInfo.TranslationsPath))
     # app.installTranslator(qt_translator)
     print(QtWidgets.QStyleFactory.keys())
@@ -2418,7 +2460,7 @@ def main():
 
     form = App()
     form.show()
-    splash.finish(form)
+    # splash.finish(form)
     app.exec_()
 
 
