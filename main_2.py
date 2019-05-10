@@ -1132,7 +1132,6 @@ class App(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         self.type_exp.setCurrentIndex(-1)
 
         self.activateTab(4)
-
         #self.show_bills(self.bills.filter())
         self.filterbills()
 

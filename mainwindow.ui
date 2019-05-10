@@ -2054,7 +2054,7 @@
     <string>&amp;Delete</string>
    </property>
    <property name="shortcut">
-    <string>Del</string>
+    <string>Shift+Del</string>
    </property>
   </action>
   <action name="actionMark_as_archived">
